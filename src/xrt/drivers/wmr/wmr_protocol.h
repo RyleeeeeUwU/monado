@@ -65,7 +65,8 @@ struct hololens_sensors_packet
 	int16_t gyro[3][4 * 8];
 	uint64_t accel_timestamp[4];
 	int32_t accel[3][4];
-	uint64_t video_timestamp[4];
+	uint64_t mag_timestamp[4];
+	int16_t mag[3][4];
 };
 
 struct wmr_config_header

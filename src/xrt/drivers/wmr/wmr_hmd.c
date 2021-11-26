@@ -227,7 +227,13 @@ hololens_sensors_decode_packet(struct wmr_hmd *wh,
 	}
 
 	for (int i = 0; i < 4; i++) {
-		pkt->video_timestamp[i] = read64(&buffer);
+		pkt->mag_timestamp[i] = read64(&buffer);
+	}
+
+	for (int i = 0; i < 3; i++) {
+		for (int j = 0; j < 4; j++) {
+			pkt->mag[i][j] = read16(&buffer);
+		}
 	}
 
 	return;
