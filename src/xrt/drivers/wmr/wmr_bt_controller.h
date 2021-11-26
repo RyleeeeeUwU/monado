@@ -69,6 +69,8 @@ struct wmr_bt_controller
 	struct xrt_vec3 last_angular_velocity;
 
 	enum u_logging_level log_level;
+
+	struct wmr_controller_input input;
 };
 
 
