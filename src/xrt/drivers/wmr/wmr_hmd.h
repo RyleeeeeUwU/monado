@@ -26,10 +26,14 @@
 #include "wmr_protocol.h"
 #include "wmr_config.h"
 #include "wmr_camera.h"
+#include "wmr_bt_controller.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Support 2 controllers on HP Reverb G2 */
+#define WMR_MAX_CONTROLLERS 2
 
 enum wmr_headset_type
 {
@@ -186,6 +190,9 @@ struct wmr_hmd
 		char hand_status[128];
 		char slam_status[128];
 	} gui;
+
+	/* Tunnelled controller devices (Reverb G2) */
+	struct wmr_bt_controller *controller[WMR_MAX_CONTROLLERS];
 };
 
 static inline struct wmr_hmd *

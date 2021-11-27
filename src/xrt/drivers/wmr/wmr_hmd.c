@@ -104,7 +104,6 @@ const struct wmr_headset_descriptor headset_map[] = {
 };
 const int headset_map_n = sizeof(headset_map) / sizeof(headset_map[0]);
 
-
 /*
  *
  * Hololens decode packets.
@@ -154,6 +153,24 @@ hololens_sensors_decode_packet(struct wmr_hmd *wh,
 	}
 }
 
+
+static void
+hololens_ensure_controller(struct wmr_hmd *wh, uint8_t controller_id)
+{
+	if (controller_id >= WMR_MAX_CONTROLLERS)
+		return;
+
+	if (wh->controller[controller_id] != NULL)
+		return;
+
+	WMR_DEBUG(wh, "Adding controller device %d", controller_id);
+
+	enum xrt_device_type controller_type =
+	    controller_id == 0 ? XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER : XRT_DEVICE_TYPE_RIGHT_HAND_CONTROLLER;
+
+	wh->controller[controller_id] =
+	    wmr_controller_create_tunnelled(wh->hid_hololens_sensors_dev, controller_type, wh->log_level);
+}
 
 /*
  *
@@ -210,7 +227,7 @@ hololens_handle_controller_status_packet(struct wmr_hmd *wh, const unsigned char
 		break;
 	}
 	case WMR_CONTROLLER_STATUS_ONLINE: {
-		if (size < 10) {
+		if (size < 7) {
 			WMR_TRACE(wh, "Got small controller online status packet (%i)", size);
 			return;
 		}
@@ -220,11 +237,17 @@ hololens_handle_controller_status_packet(struct wmr_hmd *wh, const unsigned char
 
 		uint16_t vid = read16(&buffer);
 		uint16_t pid = read16(&buffer);
-		uint8_t unknown1 = read8(&buffer);
-		uint16_t unknown2160 = read16(&buffer);
 
-		WMR_TRACE(wh, "Controller %d online. VID 0x%04x PID 0x%04x val1 %u val2 %u", controller_id, vid, pid,
-		          unknown1, unknown2160);
+		if (size >= 10) {
+			uint8_t unknown1 = read8(&buffer);
+			uint16_t unknown2160 = read16(&buffer);
+			WMR_TRACE(wh, "Controller %d online. VID 0x%04x PID 0x%04x val1 %u val2 %u", controller_id, vid,
+			          pid, unknown1, unknown2160);
+		} else {
+			WMR_TRACE(wh, "Controller %d online. VID 0x%04x PID 0x%04x", controller_id, vid, pid);
+		}
+
+		hololens_ensure_controller(wh, controller_id);
 		break;
 	}
 	default: //
@@ -270,19 +293,25 @@ hololens_handle_bt_iface_packet(struct wmr_hmd *wh, const unsigned char *buffer,
 static void
 hololens_handle_controller_packet(struct wmr_hmd *wh, const unsigned char *buffer, int size)
 {
-	DRV_TRACE_MARKER();
-
-	if (size >= 45) {
-		WMR_TRACE(wh,
-		          "Got controller (%i)\n\t%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x | %02x %02x %02x "
-		          "%02x %02x %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
-		          size, buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
-		          buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
-		          buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22],
-		          buffer[23], buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29]);
-	} else {
-		WMR_TRACE(wh, "Got controller packet (%i)\n\t%02x", size, buffer[0]);
+	if (size < 45) {
+		WMR_TRACE(wh, "Got unknown short controller packet (%i)\n\t%02x", size, buffer[0]);
+		return;
 	}
+
+	uint8_t packet_id = buffer[0];
+	struct wmr_bt_controller *controller = NULL;
+
+	if (packet_id == WMR_MS_HOLOLENS_MSG_LEFT_CONTROLLER) {
+		controller = wh->controller[0];
+	} else if (packet_id == WMR_MS_HOLOLENS_MSG_RIGHT_CONTROLLER) {
+		controller = wh->controller[1];
+	}
+
+	if (controller == NULL)
+		return; /* Controller online message not yet seen */
+
+	uint64_t now_ns = os_monotonic_get_ns();
+	wmr_controller_handle_sensors_packet(controller, now_ns, buffer, size);
 }
 
 static void
