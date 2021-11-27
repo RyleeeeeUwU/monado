@@ -51,8 +51,10 @@ struct wmr_bt_controller
 {
 	struct xrt_device base;
 
+	bool standalone_device;
+
+	enum u_logging_level log_level;
 	struct os_hid_device *controller_hid;
-	struct os_thread_helper controller_thread;
 
 	/* firmware configuration block */
 	struct wmr_controller_config config;
@@ -68,9 +70,9 @@ struct wmr_bt_controller
 	//! The last angular velocity from the IMU, for prediction.
 	struct xrt_vec3 last_angular_velocity;
 
-	enum u_logging_level log_level;
-
-	struct wmr_controller_input input;
+	/* Thread for direct Bluetooth connections,
+	 * not for tunneled */
+	struct os_thread_helper controller_thread;
 };
 
 
@@ -79,6 +81,13 @@ wmr_bt_controller_create(struct os_hid_device *controller_hid,
                          enum xrt_device_type controller_type,
                          enum u_logging_level log_level);
 
+struct wmr_bt_controller *
+wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
+                                enum xrt_device_type controller_type,
+                                enum u_logging_level log_level);
+
+void
+wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d, uint64_t now_ns, const unsigned char *buffer, int size);
 
 #ifdef __cplusplus
 }

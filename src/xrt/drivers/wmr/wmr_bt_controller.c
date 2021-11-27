@@ -82,26 +82,10 @@ read_packets(struct wmr_bt_controller *d)
 
 	switch (buffer[0]) {
 	case WMR_BT_MOTION_CONTROLLER_MSG:
-		os_mutex_lock(&d->lock);
-		// Note: skipping msg type byte
-		bool b = wmr_controller_packet_parse(&buffer[1], (size_t)size - 1, &d->input, d->log_level);
-		if (b) {
-			m_imu_3dof_update(&d->fusion, d->input.imu.timestamp_ticks * WMR_MOTION_CONTROLLER_NS_PER_TICK,
-			                  &d->input.imu.acc, &d->input.imu.gyro);
-
-			d->last_imu_timestamp_ns = now_ns;
-			d->last_angular_velocity = d->input.imu.gyro;
-
-		} else {
-			WMR_ERROR(d, "WMR Controller (Bluetooth): Failed parsing message type: %02x, size: %i",
-			          buffer[0], size);
-			os_mutex_unlock(&d->lock);
-			return false;
-		}
-		os_mutex_unlock(&d->lock);
+		wmr_controller_handle_sensors_packet(d, now_ns, buffer, size);
 		break;
-	default:
-		WMR_DEBUG(d, "WMR Controller (Bluetooth): Unknown message type: %02x, size: %i", buffer[0], size);
+	default: //
+		WMR_DEBUG(d, "WMR Controller: Unknown message type: %02x, size: %i", buffer[0], size);
 		break;
 	}
 
@@ -407,12 +391,14 @@ wmr_bt_controller_destroy(struct xrt_device *xdev)
 	// Remove the variable tracking.
 	u_var_remove_root(d);
 
-	// Destroy the thread object.
-	os_thread_helper_destroy(&d->controller_thread);
+	if (d->standalone_device) {
+		// Destroy the thread object.
+		os_thread_helper_destroy(&d->controller_thread);
 
-	if (d->controller_hid != NULL) {
-		os_hid_destroy(d->controller_hid);
-		d->controller_hid = NULL;
+		if (d->controller_hid != NULL) {
+			os_hid_destroy(d->controller_hid);
+			d->controller_hid = NULL;
+		}
 	}
 
 	os_mutex_destroy(&d->lock);
@@ -458,11 +444,11 @@ static struct xrt_binding_profile binding_profiles[1] = {
  *
  */
 
-
-struct xrt_device *
-wmr_bt_controller_create(struct os_hid_device *controller_hid,
-                         enum xrt_device_type controller_type,
-                         enum u_logging_level log_level)
+static struct wmr_bt_controller *
+wmr_controller_create_common(struct os_hid_device *controller_hid,
+                             bool standalone_device,
+                             enum xrt_device_type controller_type,
+                             enum u_logging_level log_level)
 {
 	DRV_TRACE_MARKER();
 
@@ -471,6 +457,7 @@ wmr_bt_controller_create(struct os_hid_device *controller_hid,
 
 	d->log_level = log_level;
 	d->controller_hid = controller_hid;
+	d->standalone_device = standalone_device;
 
 	if (controller_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
 		snprintf(d->base.str, ARRAY_SIZE(d->base.str), "WMR Left Controller");
@@ -513,8 +500,6 @@ wmr_bt_controller_create(struct os_hid_device *controller_hid,
 	d->input.imu.timestamp_ticks = 0;
 	m_imu_3dof_init(&d->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 
-
-
 	int ret = 0;
 
 	ret = os_mutex_init(&d->lock);
@@ -529,25 +514,6 @@ wmr_bt_controller_create(struct os_hid_device *controller_hid,
 		wmr_bt_controller_destroy(&d->base);
 		return NULL;
 	}
-
-	// Thread and other state.
-	ret = os_thread_helper_init(&d->controller_thread);
-	if (ret != 0) {
-		WMR_ERROR(d, "WMR Controller (Bluetooth): Failed to init controller threading!");
-		wmr_bt_controller_destroy(&d->base);
-		d = NULL;
-		return NULL;
-	}
-
-	// Hand over controller device to reading thread.
-	ret = os_thread_helper_start(&d->controller_thread, wmr_bt_controller_run_thread, d);
-	if (ret != 0) {
-		WMR_ERROR(d, "WMR Controller (Bluetooth): Failed to start controller thread!");
-		wmr_bt_controller_destroy(&d->base);
-		d = NULL;
-		return NULL;
-	}
-
 
 	u_var_add_root(d, d->base.str, true);
 	u_var_add_bool(d, &d->input.menu, "input.menu");
@@ -567,6 +533,73 @@ wmr_bt_controller_create(struct os_hid_device *controller_hid,
 	u_var_add_ro_vec3_f32(d, &d->input.imu.gyro, "imu.gyro");
 	u_var_add_i32(d, &d->input.imu.temperature, "imu.temperature");
 
+	return d;
+}
+
+struct xrt_device *
+wmr_bt_controller_create(struct os_hid_device *controller_hid,
+                         enum xrt_device_type controller_type,
+                         enum u_logging_level log_level)
+{
+
+	struct wmr_bt_controller *d = wmr_controller_create_common(controller_hid, true, controller_type, log_level);
+
+	if (d == NULL)
+		return NULL;
+
+	// Packet reading thread for standalone BT-connected controller.
+	int ret = 0;
+
+	ret = os_thread_helper_init(&d->controller_thread);
+	if (ret != 0) {
+		WMR_ERROR(d, "WMR Controller (Bluetooth): Failed to init controller threading!");
+		wmr_bt_controller_destroy(&d->base);
+		d = NULL;
+		return NULL;
+	}
+
+	// Hand over controller device to reading thread.
+	ret = os_thread_helper_start(&d->controller_thread, wmr_bt_controller_run_thread, d);
+	if (ret != 0) {
+		WMR_ERROR(d, "WMR Controller (Bluetooth): Failed to start controller thread!");
+		wmr_bt_controller_destroy(&d->base);
+		d = NULL;
+		return NULL;
+	}
 
 	return &d->base;
+}
+
+struct wmr_bt_controller *
+wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
+                                enum xrt_device_type controller_type,
+                                enum u_logging_level log_level)
+{
+	struct wmr_bt_controller *d = wmr_controller_create_common(controller_hid, false, controller_type, log_level);
+
+	if (d == NULL)
+		return NULL;
+
+	return d;
+}
+
+void
+wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d, uint64_t now_ns, const unsigned char *buffer, int size)
+{
+	os_mutex_lock(&d->lock);
+
+	// Note: skipping msg type byte
+	if (!wmr_controller_packet_parse(&buffer[1], (size_t)size - 1, &d->input, d->log_level)) {
+		WMR_ERROR(d, "WMR Controller: Failed parsing message type: %02x, size: %i", buffer[0], size);
+		os_mutex_unlock(&d->lock);
+		return;
+	}
+
+	m_imu_3dof_update(&d->fusion, d->input.imu.timestamp_ticks * WMR_MOTION_CONTROLLER_NS_PER_TICK,
+	                  &d->input.imu.acc, &d->input.imu.gyro);
+
+	d->last_imu_timestamp_ns = now_ns;
+	d->last_angular_velocity = d->input.imu.gyro;
+
+	os_mutex_unlock(&d->lock);
 }
