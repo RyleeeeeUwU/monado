@@ -42,7 +42,8 @@
 #define WMR_WARN(d, ...) U_LOG_XDEV_IFL_W(&d->base, d->log_level, __VA_ARGS__)
 #define WMR_ERROR(d, ...) U_LOG_XDEV_IFL_E(&d->base, d->log_level, __VA_ARGS__)
 
-#define SET_INPUT(NAME) (d->base.inputs[WMR_INDEX_##NAME].name = XRT_INPUT_WMR_##NAME)
+#define SET_INPUT(NAME) (d->base.inputs[WMR_CONTROLLER_INPUT_ID_##NAME].name = XRT_INPUT_WMR_##NAME)
+#define SET_INPUT_INACTIVE(NAME) (d->base.inputs[WMR_CONTROLLER_INPUT_ID_##NAME].active = false)
 
 //! file path to store controller JSON configuration blocks that
 //! read from the firmware.
@@ -346,14 +347,14 @@ wmr_bt_controller_update_inputs(struct xrt_device *xdev)
 
 	os_mutex_lock(&d->lock);
 
-	inputs[WMR_INDEX_MENU_CLICK].value.boolean = d->input.menu;
-	inputs[WMR_INDEX_SQUEEZE_CLICK].value.boolean = d->input.squeeze;
-	inputs[WMR_INDEX_TRIGGER_VALUE].value.vec1.x = d->input.trigger;
-	inputs[WMR_INDEX_THUMBSTICK_CLICK].value.boolean = d->input.thumbstick.click;
-	inputs[WMR_INDEX_THUMBSTICK].value.vec2 = d->input.thumbstick.values;
-	inputs[WMR_INDEX_TRACKPAD_CLICK].value.boolean = d->input.trackpad.click;
-	inputs[WMR_INDEX_TRACKPAD_TOUCH].value.boolean = d->input.trackpad.touch;
-	inputs[WMR_INDEX_TRACKPAD].value.vec2 = d->input.trackpad.values;
+	inputs[WMR_CONTROLLER_INPUT_ID_MENU_CLICK].value.boolean = d->input.menu;
+	inputs[WMR_CONTROLLER_INPUT_ID_SQUEEZE_CLICK].value.boolean = d->input.squeeze;
+	inputs[WMR_CONTROLLER_INPUT_ID_TRIGGER_VALUE].value.vec1.x = d->input.trigger;
+	inputs[WMR_CONTROLLER_INPUT_ID_THUMBSTICK_CLICK].value.boolean = d->input.thumbstick.click;
+	inputs[WMR_CONTROLLER_INPUT_ID_THUMBSTICK].value.vec2 = d->input.thumbstick.values;
+	inputs[WMR_CONTROLLER_INPUT_ID_TRACKPAD_CLICK].value.boolean = d->input.trackpad.click;
+	inputs[WMR_CONTROLLER_INPUT_ID_TRACKPAD_TOUCH].value.boolean = d->input.trackpad.touch;
+	inputs[WMR_CONTROLLER_INPUT_ID_TRACKPAD].value.vec2 = d->input.trackpad.values;
 
 	os_mutex_unlock(&d->lock);
 }
@@ -453,7 +454,8 @@ wmr_controller_create_common(struct os_hid_device *controller_hid,
 	DRV_TRACE_MARKER();
 
 	enum u_device_alloc_flags flags = U_DEVICE_ALLOC_TRACKING_NONE;
-	struct wmr_bt_controller *d = U_DEVICE_ALLOCATE(struct wmr_bt_controller, flags, 10, 1);
+	struct wmr_bt_controller *d =
+	    U_DEVICE_ALLOCATE(struct wmr_bt_controller, flags, WMR_CONTROLLER_INPUT_ID_MAX, 1);
 
 	d->log_level = log_level;
 	d->controller_hid = controller_hid;
@@ -470,16 +472,24 @@ wmr_controller_create_common(struct os_hid_device *controller_hid,
 	d->base.set_output = wmr_bt_controller_set_output;
 	d->base.update_inputs = wmr_bt_controller_update_inputs;
 
+	d->variant = WMR_CONTROLLER_VARIANT_ORIGINAL;
+
+	SET_INPUT(AIM_POSE);
+	SET_INPUT(GRIP_POSE);
 	SET_INPUT(MENU_CLICK);
 	SET_INPUT(SQUEEZE_CLICK);
 	SET_INPUT(TRIGGER_VALUE);
 	SET_INPUT(THUMBSTICK_CLICK);
 	SET_INPUT(THUMBSTICK);
+
 	SET_INPUT(TRACKPAD_CLICK);
 	SET_INPUT(TRACKPAD_TOUCH);
 	SET_INPUT(TRACKPAD);
-	SET_INPUT(GRIP_POSE);
-	SET_INPUT(AIM_POSE);
+
+	SET_INPUT_INACTIVE(A_CLICK);
+	SET_INPUT_INACTIVE(B_CLICK);
+	SET_INPUT_INACTIVE(X_CLICK);
+	SET_INPUT_INACTIVE(Y_CLICK);
 
 	for (uint32_t i = 0; i < d->base.input_count; i++) {
 		d->base.inputs[0].active = true;

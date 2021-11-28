@@ -27,18 +27,39 @@ extern "C" {
 /*!
  * Indices in input list of each input.
  */
-enum wmr_bt_input_index
+enum wmr_controller_input_id
 {
-	WMR_INDEX_MENU_CLICK,
-	WMR_INDEX_SQUEEZE_CLICK,
-	WMR_INDEX_TRIGGER_VALUE,
-	WMR_INDEX_THUMBSTICK_CLICK,
-	WMR_INDEX_THUMBSTICK,
-	WMR_INDEX_TRACKPAD_CLICK,
-	WMR_INDEX_TRACKPAD_TOUCH,
-	WMR_INDEX_TRACKPAD,
-	WMR_INDEX_GRIP_POSE,
-	WMR_INDEX_AIM_POSE,
+	/* Common inputs */
+	WMR_CONTROLLER_INPUT_ID_AIM_POSE = 0,
+	WMR_CONTROLLER_INPUT_ID_GRIP_POSE,
+	WMR_CONTROLLER_INPUT_ID_MENU_CLICK,
+	WMR_CONTROLLER_INPUT_ID_WIN_CLICK,
+	WMR_CONTROLLER_INPUT_ID_SQUEEZE_CLICK,
+	WMR_CONTROLLER_INPUT_ID_TRIGGER_VALUE,
+	WMR_CONTROLLER_INPUT_ID_THUMBSTICK_CLICK,
+	WMR_CONTROLLER_INPUT_ID_THUMBSTICK,
+
+	/* Original WMR controller specific */
+	WMR_CONTROLLER_INPUT_ID_TRACKPAD_CLICK,
+	WMR_CONTROLLER_INPUT_ID_TRACKPAD_TOUCH,
+	WMR_CONTROLLER_INPUT_ID_TRACKPAD,
+
+	/* Reverb G2 Oculus-touch style controller specific */
+	WMR_CONTROLLER_INPUT_ID_A_CLICK,
+	WMR_CONTROLLER_INPUT_ID_B_CLICK,
+	WMR_CONTROLLER_INPUT_ID_X_CLICK,
+	WMR_CONTROLLER_INPUT_ID_Y_CLICK,
+
+	WMR_CONTROLLER_INPUT_ID_MAX,
+};
+
+/*!
+ * Known controller variants
+ */
+enum wmr_controller_variant
+{
+	WMR_CONTROLLER_VARIANT_ORIGINAL,
+	WMR_CONTROLLER_VARIANT_G2,
 };
 
 /*!
@@ -58,6 +79,8 @@ struct wmr_bt_controller
 
 	/* firmware configuration block */
 	struct wmr_controller_config config;
+
+	enum wmr_controller_variant variant;
 
 	struct os_mutex lock;
 
