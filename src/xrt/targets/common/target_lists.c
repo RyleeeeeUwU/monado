@@ -40,6 +40,10 @@
 #include "psvr/psvr_interface.h"
 #endif
 
+#ifdef XRT_BUILD_DRIVER_RIFT_S
+#include "rift_s/rift_s_interface.h"
+#endif
+
 #ifdef XRT_BUILD_DRIVER_HYDRA
 #include "hydra/hydra_interface.h"
 #endif
@@ -146,6 +150,10 @@ struct xrt_prober_entry target_entry_list[] = {
 #ifdef XRT_BUILD_DRIVER_HDK
     {HDK_VID, HDK_PID, hdk_found, "OSVR HDK", "osvr"},
 #endif // XRT_BUILD_DRIVER_HDK
+
+#ifdef XRT_BUILD_DRIVER_RIFT_S
+    {OCULUS_VR_INC_VID, OCULUS_RIFT_S_PID, rift_s_found, "Oculus Rift S", "rift_s"},
+#endif
 
 #ifdef XRT_BUILD_DRIVER_VIVE
     {HTC_VID, VIVE_PID, vive_found, "HTC Vive", "vive"},
