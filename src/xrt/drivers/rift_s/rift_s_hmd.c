@@ -551,6 +551,10 @@ rift_s_hmd_create(struct os_hid_device *hid_hmd,
 	// Distortion information, fills in xdev->compute_distortion().
 	u_distortion_mesh_set_none(&hmd->base);
 
+	/* Set Opaque blend mode */
+	hmd->base.hmd->blend_modes[0] = XRT_BLEND_MODE_OPAQUE;
+	hmd->base.hmd->blend_mode_count = 1;
+
 #if 0 // Render distortion etc
       // Set default device properties
 	ohmd_set_default_device_properties(&hmd_dev->base.properties);
