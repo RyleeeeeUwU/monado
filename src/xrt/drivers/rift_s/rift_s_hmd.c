@@ -602,6 +602,15 @@ rift_s_hmd_create(struct os_hid_device *hid_hmd,
 		goto cleanup;
 	}
 
+	// Allow time for enumeration of available displays by host system, so the compositor can select among them.
+	RIFT_S_INFO(
+	    "Sleeping until the HMD display is powered up so, the available displays "
+	    "can be enumerated by the host system.");
+
+	// Two seconds seems to be needed, 1 was not enough.
+	os_nanosleep(U_TIME_1MS_IN_NS * 2000);
+
+	RIFT_S_DEBUG("Oculus Rift S driver ready");
 	return hmd;
 
 cleanup:
