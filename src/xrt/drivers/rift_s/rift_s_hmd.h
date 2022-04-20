@@ -16,6 +16,7 @@
 #pragma once
 
 #include "math/m_imu_3dof.h"
+#include "util/u_distortion_mesh.h"
 #include "xrt/xrt_defines.h"
 #include "xrt/xrt_device.h"
 
@@ -49,6 +50,9 @@ struct rift_s_hmd
 	rift_s_device_info_t device_info;
 	rift_s_imu_config_t imu_config;
 	rift_s_imu_calibration imu_calibration;
+
+	/* Temporary distortion values for mesh calc */
+	struct u_panotools_values distortion_vals[2];
 };
 
 struct rift_s_hmd *

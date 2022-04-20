@@ -32,7 +32,6 @@
 #include "os/os_time.h"
 
 #include "util/u_device.h"
-#include "util/u_distortion_mesh.h"
 #include "util/u_trace_marker.h"
 #include "util/u_var.h"
 
@@ -44,9 +43,7 @@
 
 static void
 rift_s_update_inputs(struct xrt_device *xdev)
-{
-	// Empty, you should put code to update the attached input fields (if any)
-}
+{}
 
 static void
 rift_s_get_tracked_pose(struct xrt_device *xdev,
@@ -57,16 +54,20 @@ rift_s_get_tracked_pose(struct xrt_device *xdev,
 	struct rift_s_hmd *hmd = (struct rift_s_hmd *)(xdev);
 
 	if (name != XRT_INPUT_GENERIC_HEAD_POSE) {
-		RIFT_S_ERROR("unknown input name");
+		RIFT_S_ERROR("Unknown input name");
 		return;
 	}
 
+	U_ZERO(out_relation);
+
 	// Estimate pose at timestamp at_timestamp_ns!
+	os_mutex_lock(&hmd->mutex);
 	math_quat_normalize(&hmd->pose.orientation);
 	out_relation->pose = hmd->pose;
 	out_relation->relation_flags = (enum xrt_space_relation_flags)(XRT_SPACE_RELATION_ORIENTATION_VALID_BIT |
 	                                                               XRT_SPACE_RELATION_POSITION_VALID_BIT |
 	                                                               XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT);
+	os_mutex_unlock(&hmd->mutex);
 }
 
 static void
@@ -138,40 +139,18 @@ rift_s_hmd_handle_report(struct rift_s_hmd *hmd, rift_s_hmd_report_t *report)
 		hmd->last_imu_timestamp_ns += (uint64_t)dt * OS_NS_PER_USEC;
 		dt = TICK_LEN_US;
 	}
+
+	os_mutex_lock(&hmd->mutex);
+	hmd->pose.orientation = hmd->fusion.rot;
+	os_mutex_unlock(&hmd->mutex);
 }
 
-#if 0
-static int
-getf_hmd(ohmd_device *device, ohmd_float_value type, float *out)
+static bool
+rift_s_compute_distortion(struct xrt_device *xdev, int view, float u, float v, struct xrt_uv_triplet *result)
 {
-	struct rift_s_hmd *hmd = dev_priv->hmd;
-
-	switch (type) {
-	case OHMD_DISTORTION_K: {
-		for (int i = 0; i < 6; i++) {
-			out[i] = 0.0; // hmd->display_info.distortion_k[i];
-		}
-		break;
-	}
-
-	case OHMD_ROTATION_QUAT: {
-		*(quatf *)out = hmd->sensor_fusion.orient;
-		break;
-	}
-
-	case OHMD_POSITION_VECTOR: out[0] = out[1] = out[2] = 0; break;
-
-	case OHMD_CONTROLS_STATE: break;
-
-	default:
-		ohmd_set_error(hmd->ctx, "invalid type given to getf (%ud)", type);
-		return -1;
-		break;
-	}
-
-	return 0;
+	struct rift_s_hmd *hmd = (struct rift_s_hmd *)(xdev);
+	return u_compute_distortion_panotools(&hmd->distortion_vals[view], u, v, result);
 }
-#endif
 
 #if 0
 static int
@@ -300,98 +279,89 @@ rift_s_hmd_create(struct rift_s_system *sys)
 #endif
 
 	// Set up display details
+	// FIXME: These are all wrong and should be derived from HMD reports
 	// refresh rate
-	hmd->base.hmd->screens[0].nominal_frame_interval_ns = time_s_to_ns(1.0f / 90.0f);
+	hmd->base.hmd->screens[0].nominal_frame_interval_ns = time_s_to_ns(1.0f / 80.0f);
 
-	const double hFOV = 90 * (M_PI / 180.0);
-	const double vFOV = 96.73 * (M_PI / 180.0);
+	/* In the Rift S, there's one panel that is rotated
+	 * to the right, so reported to the OS as a
+	 * 1440x2560 wxh panel that needs to be split
+	 * in two and each view rotated for rendering */
+	const int view_w = 1440;
+	const int view_h = 1280;
+
+	/* screen is the physical width/height of the panel
+	 * as presented to the OS */
+	hmd->base.hmd->screens[0].w_pixels = view_w;
+	hmd->base.hmd->screens[0].h_pixels = view_h * 2;
+
+	// Left, Right eye view setup
+	for (uint8_t eye = 0; eye < 2; ++eye) {
+		// Display w/h need to be swapped, as the client sees / renders
+		hmd->base.hmd->views[eye].display.w_pixels = view_h;
+		hmd->base.hmd->views[eye].display.h_pixels = view_w;
+		// Viewport is position on the output panel
+		hmd->base.hmd->views[eye].viewport.y_pixels = 0;
+		hmd->base.hmd->views[eye].viewport.w_pixels = view_w;
+		hmd->base.hmd->views[eye].viewport.h_pixels = view_h;
+		hmd->base.hmd->views[eye].rot = u_device_rotation_right;
+	}
+	// left eye starts at y=0, right eye starts at y=view_height
+	hmd->base.hmd->views[0].viewport.y_pixels = 0;
+	hmd->base.hmd->views[1].viewport.y_pixels = view_h;
+
+	/* FIXME: Incorrection distortion taken from the Rift CV1 for now */
+	const double display_w_meters = 0.149760f;
+	const double display_h_meters = 0.093600f;
+	const double lens_sep = 0.074f;
+	const double hFOV = DEG_TO_RAD(105.0);
+
 	// center of projection
-	const double hCOP = 0.529;
-	const double vCOP = 0.5;
+	const double hCOP = lens_sep / 2.0;
+	const double vCOP = display_h_meters / 2.0;
+
+	struct u_panotools_values distortion_vals = {
+	    .distortion_k = {0.819f, -0.241f, 0.324f, 0.098f, 0.0},
+	    .aberration_k = {0.9952420f, 1.0f, 1.0008074f},
+	    .scale = display_w_meters -
+	             lens_sep / 2.0, // Assume distortion is across the larger distance from lens center to edge
+	    .lens_center = {display_w_meters - hCOP, vCOP},
+	    .viewport_size = {view_w, view_h},
+	};
+
 	if (
 	    /* right eye */
-	    !math_compute_fovs(1, hCOP, hFOV, 1, vCOP, vFOV, &hmd->base.hmd->distortion.fov[1]) ||
+	    !math_compute_fovs(display_w_meters, hCOP, hFOV, display_h_meters, vCOP, 0.0,
+	                       &hmd->base.hmd->distortion.fov[1]) ||
 	    /*
 	     * left eye - same as right eye, except the horizontal center of projection is moved in the opposite
 	     * direction now
 	     */
-	    !math_compute_fovs(1, 1.0 - hCOP, hFOV, 1, vCOP, vFOV, &hmd->base.hmd->distortion.fov[0])) {
+	    !math_compute_fovs(display_w_meters, display_w_meters - hCOP, hFOV, display_h_meters, vCOP, 0.0,
+	                       &hmd->base.hmd->distortion.fov[0])) {
 		// If those failed, it means our math was impossible.
 		RIFT_S_ERROR("Failed to setup basic device info");
 		goto cleanup;
 	}
 
-	const int panel_w = 1080;
-	const int panel_h = 1200;
+	hmd->distortion_vals[0] = distortion_vals;
+	// Move the lens center for the right view
+	distortion_vals.lens_center.x = hCOP;
+	hmd->distortion_vals[1] = distortion_vals;
 
-	// Single "screen" (always the case)
-	hmd->base.hmd->screens[0].w_pixels = panel_w * 2;
-	hmd->base.hmd->screens[0].h_pixels = panel_h;
+	hmd->base.hmd->distortion.models = XRT_DISTORTION_MODEL_COMPUTE;
+	hmd->base.hmd->distortion.preferred = XRT_DISTORTION_MODEL_COMPUTE;
+	hmd->base.compute_distortion = rift_s_compute_distortion;
 
-	// Left, Right
-	for (uint8_t eye = 0; eye < 2; ++eye) {
-		hmd->base.hmd->views[eye].display.w_pixels = panel_w;
-		hmd->base.hmd->views[eye].display.h_pixels = panel_h;
-		hmd->base.hmd->views[eye].viewport.y_pixels = 0;
-		hmd->base.hmd->views[eye].viewport.w_pixels = panel_w;
-		hmd->base.hmd->views[eye].viewport.h_pixels = panel_h;
-		// if rotation is not identity, the dimensions can get more complex.
-		hmd->base.hmd->views[eye].rot = u_device_rotation_ident;
-	}
-	// left eye starts at x=0, right eye starts at x=panel_width
-	hmd->base.hmd->views[0].viewport.x_pixels = 0;
-	hmd->base.hmd->views[1].viewport.x_pixels = panel_w;
+	/* Set Opaque blend mode */
+	hmd->base.hmd->blend_modes[0] = XRT_BLEND_MODE_OPAQUE;
+	hmd->base.hmd->blend_mode_count = 1;
 
 	// Setup variable tracker: Optional but useful for debugging
 	u_var_add_root(hmd, "Oculus Rift S", true);
 	u_var_add_pose(hmd, &hmd->pose, "pose");
 	u_var_add_log_level(hmd, &rift_s_log_level, "log_level");
 
-	// Distortion information, fills in xdev->compute_distortion().
-	u_distortion_mesh_set_none(&hmd->base);
-
-	/* Set Opaque blend mode */
-	hmd->base.hmd->blend_modes[0] = XRT_BLEND_MODE_OPAQUE;
-	hmd->base.hmd->blend_mode_count = 1;
-
-#if 0 // Render distortion etc
-      // Set default device properties
-	ohmd_set_default_device_properties(&hmd_dev->base.properties);
-
-	/* FIXME: These defaults should be replaced from device configuration */
-	hmd_dev->base.properties.hsize = 0.149760f;
-	hmd_dev->base.properties.vsize = 0.093600f;
-	hmd_dev->base.properties.lens_sep = 0.074f;
-	hmd_dev->base.properties.lens_vpos = 0.046800f;
-	hmd_dev->base.properties.fov = DEG_TO_RAD(105);
-
-	/* FIXME: Incorrection distortion taken from the Rift CV1 for now */
-#if 1
-	ohmd_set_universal_distortion_k(&(hmd_dev->base.properties), 0.098f, .324f, -0.241f, 0.819f);
-	ohmd_set_universal_aberration_k(&(hmd_dev->base.properties), 0.9952420f, 1.0f, 1.0008074f);
-#else
-	/* First pass at manual calibration */
-	double scale = 1.31;
-	double a = 0.049582 * scale, b = 0.221123 * scale, c = -0.174273 * scale;
-	double d = 1.0 - (a + b + c);
-	ohmd_set_universal_distortion_k(&(hmd_dev->base.properties), a, b, c, d);
-	ohmd_set_universal_aberration_k(&(hmd_dev->base.properties), 0.99043452, 1.0, 1.0073939);
-#endif
-
-	hmd_dev->base.properties.hres = priv->device_info.h_resolution;
-	hmd_dev->base.properties.vres = priv->device_info.v_resolution;
-
-#if 0
-	hmd_dev->base.properties.hsize = priv->device_info.h_screen_size;
-	hmd_dev->base.properties.vsize = priv->device_info.v_screen_size;
-	hmd_dev->base.properties.lens_sep = priv->device_info.lens_separation;
-	hmd_dev->base.properties.lens_vpos = priv->device_info.v_center;
-#endif
-	hmd_dev->base.properties.ratio =
-	    ((float)priv->device_info.h_resolution / (float)priv->device_info.v_resolution) / 2.0f;
-
-	ohmd_calc_default_proj_matrices(&hmd_dev->base.properties);
-#endif
 
 	return hmd;
 
