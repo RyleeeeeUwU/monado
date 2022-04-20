@@ -17,7 +17,6 @@
 
 #include "util/u_device.h"
 #include "util/u_trace_marker.h"
-#include "util/u_var.h"
 
 #include "rift_s.h"
 #include "rift_s_hmd.h"
@@ -333,7 +332,7 @@ static int
 getf_touch_controller(ohmd_device *device, ohmd_float_value type, float *out)
 {
 	rift_s_device_priv *dev_priv = rift_s_device_priv_get(device);
-	struct rift_s_hmd *hmd = dev_priv->hmd;
+	struct rift_s_hmd *hmd = dev_priv->sys;
 	rift_s_controller_device *touch = (rift_s_controller_device *)(dev_priv);
 
 	if (touch->device_num < 0)
@@ -411,12 +410,11 @@ rift_s_controller_destroy(struct xrt_device *xdev)
 {
 	struct rift_s_controller *ctrl = (struct rift_s_controller *)(xdev);
 
-	/* Release the HMD reference */
-	/* FIXME: Tell the HMD this controller is going away */
-	rift_s_hmd_reference(&ctrl->hmd, NULL);
+	/* Tell the system this controller is going away */
+	rift_s_system_remove_controller(ctrl->sys, ctrl);
 
-	// Remove the variable tracking.
-	u_var_remove_root(ctrl);
+	/* Release the HMD reference */
+	rift_s_system_reference(&ctrl->sys, NULL);
 
 	m_imu_3dof_close(&ctrl->fusion);
 
@@ -424,7 +422,7 @@ rift_s_controller_destroy(struct xrt_device *xdev)
 }
 
 struct rift_s_controller *
-rift_s_controller_create(struct rift_s_hmd *hmd, enum xrt_device_type device_type)
+rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_type)
 {
 	DRV_TRACE_MARKER();
 
@@ -436,7 +434,7 @@ rift_s_controller_create(struct rift_s_hmd *hmd, enum xrt_device_type device_typ
 	}
 
 	/* Store a ref to the parent hmd, released in destroy */
-	rift_s_hmd_reference(&ctrl->hmd, hmd);
+	rift_s_system_reference(&ctrl->sys, sys);
 
 	ctrl->base.update_inputs = rift_s_controller_update_inputs;
 	ctrl->base.get_tracked_pose = rift_s_controller_get_tracked_pose;
@@ -461,18 +459,17 @@ rift_s_controller_create(struct rift_s_hmd *hmd, enum xrt_device_type device_typ
 void
 rift_s_controller_update_configuration(struct rift_s_controller *ctrl)
 {
-	struct rift_s_hmd *hmd = ctrl->hmd;
+	rift_s_radio_state *radio = rift_s_system_radio(ctrl->sys);
 
 	if (!ctrl->have_config && !ctrl->reading_config) {
 		const uint8_t config_req[] = {0x32, 0x20, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
-		rift_s_radio_queue_command(&hmd->radio_state, ctrl->device_id, config_req, sizeof(config_req),
+		rift_s_radio_queue_command(radio, ctrl->device_id, config_req, sizeof(config_req),
 		                           (rift_s_radio_completion_fn)ctrl_config_cb, ctrl);
 		ctrl->reading_config = true;
 	}
 
 	if (!ctrl->have_calibration && !ctrl->reading_calibration) {
-		rift_s_radio_get_json_block(&hmd->radio_state, ctrl->device_id,
-		                            (rift_s_radio_completion_fn)ctrl_json_cb, ctrl);
+		rift_s_radio_get_json_block(radio, ctrl->device_id, (rift_s_radio_completion_fn)ctrl_json_cb, ctrl);
 		ctrl->reading_calibration = true;
 	}
 }

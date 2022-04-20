@@ -5,10 +5,12 @@
  *
  * OpenHMD - Free and Open Source API and drivers for immersive technology.
  */
-#ifndef __RTFT_S_PROTOCOL__
-#define __RTFT_S_PROTOCOL__
+#ifndef __RIFT_S_PROTOCOL__
+#define __RIFT_S_PROTOCOL__
 
+#include <stdlib.h>
 #include "os/os_hid.h"
+#include "xrt/xrt_defines.h"
 
 #define FEATURE_BUFFER_SIZE 256
 

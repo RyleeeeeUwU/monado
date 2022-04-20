@@ -8,12 +8,14 @@
  * the need to be serialised and coordinated to work properly.
  *
  */
+
+#pragma once
+
 #ifndef RIFT_S_RADIO_H
 #define RIFT_S_RADIO_H
 
 #include "os/os_hid.h"
-
-#include "rift_s.h"
+#include "xrt/xrt_defines.h"
 
 typedef struct rift_s_radio_command rift_s_radio_command;
 typedef struct rift_s_radio_state rift_s_radio_state;

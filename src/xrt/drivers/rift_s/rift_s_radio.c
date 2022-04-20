@@ -10,6 +10,7 @@
 #include <assert.h>
 
 #include "util/u_misc.h"
+#include "rift_s.h"
 #include "rift_s_radio.h"
 #include "rift_s_protocol.h"
 

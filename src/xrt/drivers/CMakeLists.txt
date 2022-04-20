@@ -179,6 +179,7 @@ if(XRT_BUILD_DRIVER_RIFT_S)
 		rift_s/rift_s_protocol.h
 		rift_s/rift_s_radio.c
 		rift_s/rift_s_radio.h
+		rift_s/rift_s.c
 		rift_s/rift_s.h
 		)
 	target_link_libraries(

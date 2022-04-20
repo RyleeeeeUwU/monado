@@ -11,6 +11,8 @@
 
 #include "xrt/xrt_device.h"
 
+#include "rift_s.h"
+
 #define MAX_LOG_SIZE 1024
 
 typedef struct
@@ -30,8 +32,8 @@ struct rift_s_controller
 
 	struct xrt_pose pose;
 
-	/* The HMD this controller belongs to / receives reports from */
-	struct rift_s_hmd *hmd;
+	/* The system this controller belongs to / receives reports from */
+	struct rift_s_system *sys;
 
 	uint64_t device_id;
 	uint32_t device_type;
@@ -85,7 +87,7 @@ struct rift_s_controller
 };
 
 struct rift_s_controller *
-rift_s_controller_create(struct rift_s_hmd *hmd, enum xrt_device_type device_type);
+rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_type);
 
 void
 rift_s_controller_update_configuration(struct rift_s_controller *ctrl);

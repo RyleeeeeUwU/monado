@@ -78,15 +78,15 @@ rift_s_found(struct xrt_prober *xp,
 		return -1;
 	}
 
-	struct rift_s_hmd *hmd = rift_s_hmd_create(hid_hmd, hid_status, hid_controllers);
-	if (hmd == NULL) {
-		RIFT_S_ERROR("Failed to create Oculus Rift S device.");
+	struct rift_s_system *sys = rift_s_system_create(hid_hmd, hid_status, hid_controllers);
+	if (sys == NULL) {
+		RIFT_S_ERROR("Failed to initialise Oculus Rift S driver");
 		return -1;
 	}
 
-	out_xdev[num_devices++] = (struct xrt_device *)(hmd);
-	out_xdev[num_devices++] = rift_s_hmd_get_controller(hmd, 0);
-	out_xdev[num_devices++] = rift_s_hmd_get_controller(hmd, 1);
+	out_xdev[num_devices++] = rift_s_system_get_hmd(sys);
+	out_xdev[num_devices++] = rift_s_system_get_controller(sys, 0);
+	out_xdev[num_devices++] = rift_s_system_get_controller(sys, 1);
 
 	return num_devices;
 }

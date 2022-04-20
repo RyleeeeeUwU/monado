@@ -38,7 +38,6 @@
 
 #include "xrt/xrt_device.h"
 
-#include "rift_s.h"
 #include "rift_s_hmd.h"
 
 #define DEG_TO_RAD(D) ((D)*M_PI / 180.)
@@ -83,25 +82,19 @@ rift_s_get_view_poses(struct xrt_device *xdev,
 	                        out_poses);
 }
 
-static void
-handle_hmd_report(struct rift_s_hmd *hmd, const unsigned char *buf, int size)
+void
+rift_s_hmd_handle_report(struct rift_s_hmd *hmd, rift_s_hmd_report_t *report)
 {
-	rift_s_hmd_report_t report;
-
-	if (!rift_s_parse_hmd_report(&report, buf, size)) {
-		return;
-	}
-
 	const uint32_t TICK_LEN_US = 1000000 / hmd->imu_config.imu_hz;
 	uint32_t dt = TICK_LEN_US;
 
 	if (hmd->last_imu_timestamp_ns != 0) {
 		/* Avoid wrap-around on 32-bit device times */
-		dt = report.timestamp - hmd->last_imu_timestamp32;
+		dt = report->timestamp - hmd->last_imu_timestamp32;
 	} else {
-		hmd->last_imu_timestamp_ns = report.timestamp;
+		hmd->last_imu_timestamp_ns = report->timestamp;
 	}
-	hmd->last_imu_timestamp32 = report.timestamp;
+	hmd->last_imu_timestamp32 = report->timestamp;
 
 	const float gyro_scale = 1.0 / hmd->imu_config.gyro_scale;
 	const float accel_scale = MATH_GRAVITY_M_S2 / hmd->imu_config.accel_scale;
@@ -109,7 +102,7 @@ handle_hmd_report(struct rift_s_hmd *hmd, const unsigned char *buf, int size)
 	const float temperature_offset = hmd->imu_config.temperature_offset;
 
 	for (int i = 0; i < 3; i++) {
-		rift_s_hmd_imu_sample_t *s = report.samples + i;
+		rift_s_hmd_imu_sample_t *s = report->samples + i;
 
 		if (s->marker & 0x80)
 			break; /* Sample (and remaining ones) are invalid */
@@ -145,150 +138,6 @@ handle_hmd_report(struct rift_s_hmd *hmd, const unsigned char *buf, int size)
 		hmd->last_imu_timestamp_ns += (uint64_t)dt * OS_NS_PER_USEC;
 		dt = TICK_LEN_US;
 	}
-}
-
-static int
-update_tracked_device_types(struct rift_s_hmd *hmd)
-{
-	int res;
-	rift_s_devices_list_t dev_list;
-	struct os_hid_device *hid = hmd->handles[HMD_HID];
-
-	res = rift_s_read_devices_list(hid, &dev_list);
-	if (res < 0)
-		return res;
-
-	for (int i = 0; i < dev_list.num_devices; i++) {
-		rift_s_device_type_record_t *dev = dev_list.devices + i;
-		int d;
-
-		for (d = 0; d < hmd->num_active_tracked_devices; d++) {
-			if (hmd->tracked_device[d].device_id == dev->device_id) {
-				if (hmd->tracked_device[d].device_type != dev->device_type) {
-					hmd->tracked_device[d].device_type = dev->device_type;
-					/* FIXME: Device type changed - copy the device_id to the actual
-					 * controller device */
-				}
-				break;
-			}
-		}
-
-		if (d == hmd->num_active_tracked_devices) {
-			RIFT_S_WARN("Got a device type record for an unknown device 0x%16" PRIx64 "\n", dev->device_id);
-		}
-	}
-
-	return 0;
-}
-
-static void
-handle_controller_report(struct rift_s_hmd *hmd, const unsigned char *buf, int size)
-{
-	rift_s_controller_report_t report;
-
-	if (!rift_s_parse_controller_report(&report, buf, size)) {
-		rift_s_hexdump_buffer("Invalid Controller Report", buf, size);
-		return;
-	}
-
-	if (report.device_id == 0x00) {
-		/* Dummy report. Ignore it */
-		return;
-	}
-
-	int i;
-	struct rift_s_hmd_tracked_device *td = NULL;
-
-	for (i = 0; i < hmd->num_active_tracked_devices; i++) {
-		if (hmd->tracked_device[i].device_id == report.device_id) {
-			td = hmd->tracked_device + i;
-			break;
-		}
-	}
-
-	if (td == NULL) {
-		if (hmd->num_active_tracked_devices == MAX_TRACKED_DEVICES) {
-			RIFT_S_ERROR("Too many controllers. Can't add %08" PRIx64 "\n", report.device_id);
-			return;
-		}
-
-		/* Add a new controller to the online list */
-		td = hmd->tracked_device + hmd->num_active_tracked_devices;
-		hmd->num_active_tracked_devices++;
-
-		memset(td, 0, sizeof(struct rift_s_hmd_tracked_device));
-		td->device_id = report.device_id;
-
-		update_tracked_device_types(hmd);
-	}
-
-	struct rift_s_controller *ctrl = NULL;
-
-	switch (td->device_type) {
-	/* If we didn't already succeed in reading the type for this device, try again */
-	case RIFT_S_DEVICE_TYPE_UNKNOWN: update_tracked_device_types(hmd); break;
-	case RIFT_S_DEVICE_LEFT_CONTROLLER: ctrl = hmd->controllers[0]; break;
-	case RIFT_S_DEVICE_RIGHT_CONTROLLER: ctrl = hmd->controllers[1]; break;
-	default: break; /* Ignore unknown device type */
-	}
-
-	if (ctrl != NULL) {
-		rift_s_controller_update_configuration(ctrl);
-
-		if (!rift_s_controller_handle_report(ctrl, &report)) {
-			rift_s_hexdump_buffer("Invalid Controller Report Content", buf, size);
-		}
-	}
-}
-
-static void
-update_hmd(struct rift_s_hmd *hmd)
-{
-	unsigned char buf[FEATURE_BUFFER_SIZE];
-
-	// Handle keep alive messages
-	uint64_t now = os_monotonic_get_ns();
-
-	if ((now - hmd->last_keep_alive) / U_TIME_1MS_IN_NS >= KEEPALIVE_INTERVAL_MS) {
-		// send keep alive message
-		rift_s_send_keepalive(hmd->handles[HMD_HID]);
-		// Update the time of the last keep alive we have sent.
-		hmd->last_keep_alive = now;
-	}
-
-	/* Poll each of the 3 HID interfaces for messages and process them */
-	for (int i = 0; i < 3; i++) {
-		if (hmd->handles[i] == NULL)
-			continue;
-
-		while (true) {
-			int size = os_hid_read(hmd->handles[i], buf, FEATURE_BUFFER_SIZE, 0);
-			if (size < 0) {
-				RIFT_S_ERROR("error reading from HMD device");
-				break;
-			} else if (size == 0) {
-				break; // No more messages, return.
-			}
-
-			if (buf[0] == 0x65)
-				handle_hmd_report(hmd, buf, size);
-			else if (buf[0] == 0x67)
-				handle_controller_report(hmd, buf, size);
-			else if (buf[0] == 0x66) {
-				// System state packet. Enable the screen if the prox sensor is
-				// triggered
-				bool prox_sensor = (buf[1] == 0) ? false : true;
-				if (prox_sensor != hmd->display_on) {
-					rift_s_set_screen_enable(hmd->handles[HMD_HID], prox_sensor);
-					hmd->display_on = prox_sensor;
-				}
-			} else {
-				RIFT_S_WARN("Unknown Rift S report 0x%02x!", buf[0]);
-			}
-		}
-	}
-
-	rift_s_radio_update(&hmd->radio_state, hmd->handles[HMD_HID]);
 }
 
 #if 0
@@ -341,12 +190,12 @@ dump_fw_block(struct os_hid_device *handle, uint8_t block_id) {
 #endif
 
 static int
-read_hmd_calibration(struct rift_s_hmd *hmd)
+read_hmd_calibration(struct rift_s_hmd *hmd, struct os_hid_device *hid_hmd)
 {
 	char *json = NULL;
 	int json_len = 0;
 
-	int ret = rift_s_read_firmware_block(hmd->handles[HMD_HID], RIFT_S_FIRMWARE_BLOCK_IMU_CALIB, &json, &json_len);
+	int ret = rift_s_read_firmware_block(hid_hmd, RIFT_S_FIRMWARE_BLOCK_IMU_CALIB, &json, &json_len);
 	if (ret < 0)
 		return ret;
 
@@ -356,49 +205,18 @@ read_hmd_calibration(struct rift_s_hmd *hmd)
 	return ret;
 }
 
-static void *
-rift_s_run_thread(void *ptr)
-{
-	DRV_TRACE_MARKER();
-
-	struct rift_s_hmd *hmd = (struct rift_s_hmd *)ptr;
-
-	os_thread_helper_lock(&hmd->oth);
-	while (os_thread_helper_is_running_locked(&hmd->oth)) {
-		os_thread_helper_unlock(&hmd->oth);
-		update_hmd(hmd);
-		os_thread_helper_lock(&hmd->oth);
-
-		if (os_thread_helper_is_running_locked(&hmd->oth)) {
-			os_nanosleep(U_TIME_1MS_IN_NS);
-		}
-	}
-	os_thread_helper_unlock(&hmd->oth);
-
-	RIFT_S_DEBUG("Exiting packet reading thread");
-
-	return NULL;
-}
-
 static void
-rift_s_hmd_free(struct rift_s_hmd *hmd)
+rift_s_hmd_destroy(struct xrt_device *xdev)
 {
+	struct rift_s_hmd *hmd = (struct rift_s_hmd *)(xdev);
+
 	DRV_TRACE_MARKER();
 
-	os_thread_helper_destroy(&hmd->oth);
+	/* Remove this device from the system */
+	rift_s_system_remove_hmd(hmd->sys);
 
-	rift_s_radio_state_clear(&hmd->radio_state);
-
-	if (hmd->handles[HMD_HID]) {
-		if (rift_s_hmd_enable(hmd->handles[HMD_HID], false) < 0) {
-			RIFT_S_WARN("Failed to disable Rift S");
-		}
-	}
-
-	for (int i = 0; i < 3; i++) {
-		if (hmd->handles[i] != NULL)
-			os_hid_destroy(hmd->handles[i]);
-	}
+	/* Drop the reference to the system */
+	rift_s_system_reference(&hmd->sys, NULL);
 
 	m_imu_3dof_close(&hmd->fusion);
 
@@ -407,18 +225,8 @@ rift_s_hmd_free(struct rift_s_hmd *hmd)
 	u_device_free(&hmd->base);
 }
 
-static void
-rift_s_unref(struct xrt_device *dev)
-{
-	struct rift_s_hmd *hmd = (struct rift_s_hmd *)(dev);
-	/* Drop the reference to the HMD */
-	rift_s_hmd_reference(&hmd, NULL);
-}
-
 struct rift_s_hmd *
-rift_s_hmd_create(struct os_hid_device *hid_hmd,
-                  struct os_hid_device *hid_status,
-                  struct os_hid_device *hid_controllers)
+rift_s_hmd_create(struct rift_s_system *sys)
 {
 	int ret;
 
@@ -432,30 +240,25 @@ rift_s_hmd_create(struct os_hid_device *hid_hmd,
 		return NULL;
 	}
 
+	/* Take a reference to the rift_s_system */
+	rift_s_system_reference(&hmd->sys, sys);
+
+	hmd->base.tracking_origin = &sys->base;
+
 	hmd->base.update_inputs = rift_s_update_inputs;
 	hmd->base.get_tracked_pose = rift_s_get_tracked_pose;
 	hmd->base.get_view_poses = rift_s_get_view_poses;
-	hmd->base.destroy = rift_s_unref;
+	hmd->base.destroy = rift_s_hmd_destroy;
 	hmd->base.name = XRT_DEVICE_GENERIC_HMD;
 	hmd->base.device_type = XRT_DEVICE_TYPE_HMD;
 	hmd->pose.orientation.w = 1.0f; // All other values set to zero by U_DEVICE_ALLOCATE (which calls U_CALLOC)
 
 	m_imu_3dof_init(&hmd->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 
-	/* Init refcount */
-	hmd->ref.count = 1;
-
-	// Mutex before thread.
+	// Pose / state lock
 	ret = os_mutex_init(&hmd->mutex);
 	if (ret != 0) {
 		RIFT_S_ERROR("Failed to init mutex!");
-		goto cleanup;
-	}
-
-	// Thread and other state.
-	ret = os_thread_helper_init(&hmd->oth);
-	if (ret != 0) {
-		RIFT_S_ERROR("Failed to init thread helper!");
 		goto cleanup;
 	}
 
@@ -468,11 +271,7 @@ rift_s_hmd_create(struct os_hid_device *hid_hmd,
 
 	hmd->last_imu_timestamp_ns = 0;
 
-	hmd->handles[HMD_HID] = hid_hmd;
-	hmd->handles[STATUS_HID] = hid_status;
-	hmd->handles[CONTROLLER_HID] = hid_controllers;
-
-	rift_s_radio_state_init(&hmd->radio_state);
+	struct os_hid_device *hid_hmd = rift_s_system_hid_handle(hmd->sys);
 
 	if (rift_s_read_device_info(hid_hmd, &hmd->device_info) < 0) {
 		RIFT_S_ERROR("Failed to read Rift S device info");
@@ -489,7 +288,7 @@ rift_s_hmd_create(struct os_hid_device *hid_hmd,
 		goto cleanup;
 	}
 
-	if (read_hmd_calibration(hmd) < 0)
+	if (read_hmd_calibration(hmd, hid_hmd) < 0)
 		goto cleanup;
 
 #if 0
@@ -594,68 +393,9 @@ rift_s_hmd_create(struct os_hid_device *hid_hmd,
 	ohmd_calc_default_proj_matrices(&hmd_dev->base.properties);
 #endif
 
-	if (rift_s_hmd_enable(hmd->handles[HMD_HID], true) < 0) {
-		RIFT_S_ERROR("Failed to enable Rift S");
-		goto cleanup;
-	}
-
-	// Start the packet reading thread
-	ret = os_thread_helper_start(&hmd->oth, rift_s_run_thread, hmd);
-	if (ret != 0) {
-		RIFT_S_ERROR("Failed to start packet processing thread");
-		goto cleanup;
-	}
-
-	// Allow time for enumeration of available displays by host system, so the compositor can select among them.
-	RIFT_S_INFO(
-	    "Sleeping until the HMD display is powered up so, the available displays "
-	    "can be enumerated by the host system.");
-
-	// Two seconds seems to be needed, 1 was not enough.
-	os_nanosleep(U_TIME_1MS_IN_NS * 2000);
-
-	RIFT_S_DEBUG("Oculus Rift S driver ready");
 	return hmd;
 
 cleanup:
-	rift_s_hmd_reference(&hmd, NULL);
+	rift_s_system_reference(&hmd->sys, NULL);
 	return NULL;
-}
-
-/* Reference count handling for rift_s_hmd */
-void
-rift_s_hmd_reference(struct rift_s_hmd **dst, struct rift_s_hmd *src)
-{
-	struct rift_s_hmd *old_dst = *dst;
-
-	if (old_dst == src) {
-		return;
-	}
-
-	if (src) {
-		xrt_reference_inc(&src->ref);
-	}
-
-	*dst = src;
-
-	if (old_dst) {
-		if (xrt_reference_dec(&old_dst->ref)) {
-			rift_s_hmd_free(old_dst);
-		}
-	}
-}
-
-struct xrt_device *
-rift_s_hmd_get_controller(struct rift_s_hmd *hmd, int index)
-{
-	assert(index >= 0 || index < MAX_TRACKED_DEVICES);
-	assert(hmd->controllers[index] == NULL); // Ensure only called once per controller
-
-	if (index == 0) {
-		hmd->controllers[0] = rift_s_controller_create(hmd, XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER);
-	} else {
-		hmd->controllers[1] = rift_s_controller_create(hmd, XRT_DEVICE_TYPE_RIGHT_HAND_CONTROLLER);
-	}
-
-	return (struct xrt_device *)hmd->controllers[index];
 }
