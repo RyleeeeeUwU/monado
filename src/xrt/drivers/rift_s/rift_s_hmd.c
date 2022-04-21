@@ -254,13 +254,13 @@ rift_s_hmd_create(struct rift_s_system *sys)
 
 	struct os_hid_device *hid_hmd = rift_s_system_hid_handle(hmd->sys);
 
-	if (rift_s_read_device_info(hid_hmd, &hmd->device_info) < 0) {
+	if (rift_s_read_panel_info(hid_hmd, &hmd->panel_info) < 0) {
 		RIFT_S_ERROR("Failed to read Rift S device info");
 		goto cleanup;
 	}
 
-	if (rift_s_get_report1(hid_hmd) < 0) {
-		RIFT_S_ERROR("Failed to read Rift S Report 1");
+	if (rift_s_read_firmware_version(hid_hmd) < 0) {
+		RIFT_S_ERROR("Failed to read Rift S firmware version");
 		goto cleanup;
 	}
 

@@ -176,7 +176,7 @@ typedef struct
 	uint16_t unknown1;
 	uint8_t refresh_rate;
 	uint8_t unknown2[14];
-} rift_s_device_info_t;
+} rift_s_panel_info_t;
 
 /* Read using report 9 */
 typedef struct
@@ -224,11 +224,10 @@ typedef struct
 	rift_s_device_type_record_t devices[DEVICES_LIST_MAX_DEVICES];
 } rift_s_devices_list_t;
 
-/* FIXME: Rename this - report1 gets the firmware version */
 int
-rift_s_get_report1(struct os_hid_device *hid);
+rift_s_read_firmware_version(struct os_hid_device *hid);
 int
-rift_s_read_device_info(struct os_hid_device *hid, rift_s_device_info_t *device_info);
+rift_s_read_panel_info(struct os_hid_device *hid, rift_s_panel_info_t *panel_info);
 int
 rift_s_read_imu_config(struct os_hid_device *hid, rift_s_imu_config_t *imu_config);
 int

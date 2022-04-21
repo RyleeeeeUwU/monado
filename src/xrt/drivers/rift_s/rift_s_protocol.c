@@ -391,24 +391,24 @@ rift_s_set_screen_enable(struct os_hid_device *hid, bool enable)
 }
 
 int
-rift_s_read_device_info(struct os_hid_device *hid, rift_s_device_info_t *device_info)
+rift_s_read_panel_info(struct os_hid_device *hid, rift_s_panel_info_t *panel_info)
 {
 	uint8_t buf[FEATURE_BUFFER_SIZE];
 
 	int res = get_feature_report(hid, 0x06, buf, FEATURE_BUFFER_SIZE);
-	if (res < (int)sizeof(rift_s_device_info_t)) {
-		RIFT_S_ERROR("Failed to read %d bytes of device info", FEATURE_BUFFER_SIZE);
+	if (res < (int)sizeof(rift_s_panel_info_t)) {
+		RIFT_S_ERROR("Failed to read %d bytes of panel info", FEATURE_BUFFER_SIZE);
 		return res;
 	}
-	rift_s_hexdump_buffer("device info", buf, res);
+	rift_s_hexdump_buffer("panel info", buf, res);
 
-	*device_info = *(rift_s_device_info_t *)buf;
+	*panel_info = *(rift_s_panel_info_t *)buf;
 
 	return 0;
 }
 
 int
-rift_s_get_report1(struct os_hid_device *hid)
+rift_s_read_firmware_version(struct os_hid_device *hid)
 {
 	uint8_t buf[FEATURE_BUFFER_SIZE];
 	int res;
@@ -418,7 +418,7 @@ rift_s_get_report1(struct os_hid_device *hid)
 		return res;
 	}
 
-	rift_s_hexdump_buffer("report 1", buf, res);
+	rift_s_hexdump_buffer("Firmware version", buf, res);
 	return 0;
 }
 
@@ -444,7 +444,7 @@ rift_s_hmd_enable(struct os_hid_device *hid, bool enable)
 	int res;
 
 	if (enable) {
-		/* Unknown report 0x07 */
+		/* Proximity sensor threshold 0x07 */
 		buf[0] = 0x07;
 		buf[1] = 0xa3;
 		buf[2] = 0x01;
@@ -452,7 +452,7 @@ rift_s_hmd_enable(struct os_hid_device *hid, bool enable)
 			return res;
 	}
 
-	/* Not sure what this is doing, everything seems to work anyway without it */
+	/* Enable device */
 	buf[0] = 0x14;
 	buf[1] = enable ? 0x01 : 0x00;
 	if ((res = os_hid_set_feature(hid, buf, 2)) < 0)
@@ -483,6 +483,7 @@ rift_s_hmd_enable(struct os_hid_device *hid, bool enable)
 	return rift_s_send_camera_report(hid, enable, false);
 }
 
+/* Read the list of devices on the radio link */
 int
 rift_s_read_devices_list(struct os_hid_device *handle, rift_s_devices_list_t *dev_list)
 {

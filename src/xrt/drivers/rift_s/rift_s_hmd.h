@@ -48,7 +48,7 @@ struct rift_s_hmd
 	bool display_on;
 
 	/* Configuration / calibration info */
-	rift_s_device_info_t device_info;
+	rift_s_panel_info_t panel_info;
 	rift_s_imu_config_t imu_config;
 	rift_s_imu_calibration imu_calibration;
 
