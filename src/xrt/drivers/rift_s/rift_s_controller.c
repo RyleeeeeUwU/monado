@@ -25,7 +25,7 @@
 #include "rift_s_controller.h"
 
 /* Set to 1 to print controller states continuously */
-#define DUMP_CONTROLLER_STATE 1
+#define DUMP_CONTROLLER_STATE 0
 
 #define DEG_TO_RAD(D) ((D)*M_PI / 180.)
 
