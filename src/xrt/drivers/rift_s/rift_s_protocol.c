@@ -249,7 +249,7 @@ rift_s_read_firmware_block(struct os_hid_device *dev, uint8_t block_id, char **d
 	block_len = *(uint32_t *)(buf + 16);
 
 	if (block_len < 0xC || block_len == 0xFFFFFFFF)
-		return 0; /* Invalid block */
+		return -1; /* Invalid block */
 
 #if 0
 	uint64_t checksum = *(uint64_t *)(buf + 8);
