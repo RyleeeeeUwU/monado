@@ -251,6 +251,8 @@ update_tracked_device_types(struct rift_s_system *sys)
 			if (sys->tracked_device[d].device_id == dev->device_id) {
 				if (sys->tracked_device[d].device_type != dev->device_type) {
 					sys->tracked_device[d].device_type = dev->device_type;
+					RIFT_S_DEBUG("Tracked device 0x%16" PRIx64 " type %u now online",
+					             dev->device_id, dev->device_type);
 				}
 				break;
 			}

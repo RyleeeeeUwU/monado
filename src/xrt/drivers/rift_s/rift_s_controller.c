@@ -25,7 +25,7 @@
 #include "rift_s_controller.h"
 
 /* Set to 1 to print controller states continuously */
-#define DUMP_CONTROLLER_STATE 0
+#define DUMP_CONTROLLER_STATE 1
 
 #define DEG_TO_RAD(D) ((D)*M_PI / 180.)
 
@@ -85,33 +85,50 @@ enum touch_controller_input_index
 static void
 print_controller_state(struct rift_s_controller *ctrl)
 {
+	if (rift_s_log_level > U_LOGGING_TRACE)
+		return; // Only log at TRACE log_level
+
 	/* Dump the controller state if we see something unexpected / unknown, otherwise be quiet */
 	if (ctrl->extra_bytes_len == 0 && ctrl->mask08 == 0x50 && ctrl->mask0e == 0)
 		return;
 
-	printf("Controller %16lx type 0x%08x IMU ts %8u v2 %x accel %6d %6d %6d gyro %6d %6d %6d | ", ctrl->device_id,
-	       ctrl->device_type, ctrl->imu_timestamp, ctrl->imu_unknown_varying2, ctrl->raw_accel[0],
-	       ctrl->raw_accel[1], ctrl->raw_accel[2], ctrl->raw_gyro[0], ctrl->raw_gyro[1], ctrl->raw_gyro[2]);
+	char buf[16384] = "";
+	int bufsize = sizeof(buf) - 2;
+	int printed = 0;
 
-	printf("unk %02x %02x buttons %02x fingers %02x | ", ctrl->mask08, ctrl->mask0e, ctrl->buttons, ctrl->fingers);
-	printf("trigger %5d grip %5d |", ctrl->trigger, ctrl->grip);
-	printf("joystick x %5d y %5d |", ctrl->joystick_x, ctrl->joystick_y);
+	printed += snprintf(buf + printed, bufsize - printed,
+	                    "Controller %16lx type 0x%08x IMU ts %8u v2 %x accel %6d %6d %6d gyro %6d %6d %6d | ",
+	                    ctrl->device_id, ctrl->device_type, ctrl->imu_timestamp32, ctrl->imu_unknown_varying2,
+	                    ctrl->raw_accel[0], ctrl->raw_accel[1], ctrl->raw_accel[2], ctrl->raw_gyro[0],
+	                    ctrl->raw_gyro[1], ctrl->raw_gyro[2]);
+
+	printed += snprintf(buf + printed, bufsize - printed, "unk %02x %02x buttons %02x fingers %02x | ",
+	                    ctrl->mask08, ctrl->mask0e, ctrl->buttons, ctrl->fingers);
+	printed += snprintf(buf + printed, bufsize - printed, "trigger %5d grip %5d |", ctrl->trigger, ctrl->grip);
+	printed +=
+	    snprintf(buf + printed, bufsize - printed, "joystick x %5d y %5d |", ctrl->joystick_x, ctrl->joystick_y);
+
 	if (ctrl->device_type == RIFT_S_DEVICE_LEFT_CONTROLLER) {
-		printf("capsense x %u y %u joy %u trig %u | ", ctrl->capsense_a_x, ctrl->capsense_b_y,
-		       ctrl->capsense_joystick, ctrl->capsense_trigger);
+		printed +=
+		    snprintf(buf + printed, bufsize - printed, "capsense x %u y %u joy %u trig %u | ",
+		             ctrl->capsense_a_x, ctrl->capsense_b_y, ctrl->capsense_joystick, ctrl->capsense_trigger);
 	} else if (ctrl->device_type == RIFT_S_DEVICE_RIGHT_CONTROLLER) {
-		printf("capsense a %u b %u joy %u trig %u | ", ctrl->capsense_a_x, ctrl->capsense_b_y,
-		       ctrl->capsense_joystick, ctrl->capsense_trigger);
+		printed +=
+		    snprintf(buf + printed, bufsize - printed, "capsense a %u b %u joy %u trig %u | ",
+		             ctrl->capsense_a_x, ctrl->capsense_b_y, ctrl->capsense_joystick, ctrl->capsense_trigger);
 	} else {
-		printf("capsense ?? %u ?? %u ?? %u ?? %u | ", ctrl->capsense_a_x, ctrl->capsense_b_y,
-		       ctrl->capsense_joystick, ctrl->capsense_trigger);
+		printed +=
+		    snprintf(buf + printed, bufsize - printed, "capsense ?? %u ?? %u ?? %u ?? %u | ",
+		             ctrl->capsense_a_x, ctrl->capsense_b_y, ctrl->capsense_joystick, ctrl->capsense_trigger);
 	}
 
 	if (ctrl->extra_bytes_len) {
-		printf(" | extra ");
-		rift_s_hexdump_buffer(NULL, ctrl->extra_bytes, ctrl->extra_bytes_len);
+		printed += snprintf(buf + printed, bufsize - printed, " | extra ");
+		printed += rift_s_snprintf_hexdump_buffer(buf + printed, bufsize - printed, NULL, ctrl->extra_bytes,
+		                                          ctrl->extra_bytes_len);
 	}
-	printf("\n");
+
+	RIFT_S_TRACE(buf);
 }
 #endif
 
@@ -326,13 +343,17 @@ ctrl_config_cb(bool success, uint8_t *response_bytes, int response_bytes_len, st
 
 	response_bytes_len = response_bytes[4];
 	if (response_bytes_len < 16) {
-		RIFT_S_ERROR("Failed to read controller config block - only got %d bytes\n", response_bytes_len);
-		rift_s_hexdump_buffer("Controller Config", response_bytes, response_bytes_len);
+		char buf[16384] = "";
+		int bufsize = sizeof(buf) - 2;
+		int printed = 0;
+
+		printed += rift_s_snprintf_hexdump_buffer(buf + printed, bufsize - printed, "Controller Config",
+		                                          response_bytes, response_bytes_len);
+
+		RIFT_S_ERROR("Failed to read controller config block - only got %d bytes\n%s", response_bytes_len, buf);
 		return;
 	}
 	response_bytes += 5;
-
-	RIFT_S_INFO("Found new controller 0x%16" PRIx64 " type %08x\n", ctrl->device_id, ctrl->device_type);
 
 	ctrl->config.accel_limit = READ_LE16(response_bytes + 0);
 	ctrl->config.gyro_limit = READ_LE16(response_bytes + 2);
@@ -342,6 +363,12 @@ ctrl_config_cb(bool success, uint8_t *response_bytes, int response_bytes_len, st
 	ctrl->config.gyro_scale = READ_LEFLOAT32(response_bytes + 12);
 
 	ctrl->have_config = true;
+
+	RIFT_S_INFO("Read config for controller 0x%16" PRIx64
+	            " type %08x. "
+	            "limit/scale/hz Accel %u %f %u Gyro %u %f %u",
+	            ctrl->device_id, ctrl->device_type, ctrl->config.accel_limit, ctrl->config.accel_scale,
+	            ctrl->config.accel_hz, ctrl->config.gyro_limit, ctrl->config.gyro_scale, ctrl->config.gyro_hz);
 }
 
 static void
@@ -354,7 +381,7 @@ ctrl_json_cb(bool success, uint8_t *response_bytes, int response_bytes_len, stru
 		return;
 	}
 
-	// RIFT_S_DEBUG ("Got Controller calibration:\n%s\n", response_bytes);
+	RIFT_S_TRACE("Got Controller calibration:\n%s", response_bytes);
 
 	if (rift_s_controller_parse_imu_calibration((char *)response_bytes, &ctrl->calibration) == 0) {
 		ctrl->have_calibration = true;

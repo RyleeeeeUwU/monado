@@ -122,19 +122,20 @@ rift_s_parse_controller_report(rift_s_controller_report_t *report, const unsigne
 	return true;
 }
 
-void
-rift_s_hexdump_buffer(const char *label, const unsigned char *buf, int length)
+int
+rift_s_snprintf_hexdump_buffer(char *outbuf, size_t outbufsize, const char *label, const unsigned char *buf, int length)
 {
 	int indent = 0;
 	char ascii[17];
+	int printed = 0;
 
 	if (label)
 		indent = strlen(label) + 2;
-	printf("%s: ", label);
+	printed += snprintf(outbuf + printed, outbufsize - printed, "%s: ", label);
 
 	ascii[16] = '\0';
 	for (int i = 0; i < length; i++) {
-		printf("%02x ", buf[i]);
+		printed += snprintf(outbuf + printed, outbufsize - printed, "%02x ", buf[i]);
 
 		if (buf[i] >= ' ' && buf[i] <= '~')
 			ascii[i % 16] = buf[i];
@@ -146,15 +147,28 @@ rift_s_hexdump_buffer(const char *label, const unsigned char *buf, int length)
 				int remain = 15 - (i % 16);
 				ascii[(i + 1) % 16] = '\0';
 				/* Pad the hex dump out to 48 chars */
-				printf("%*s", 3 * remain, " ");
+				printed += snprintf(outbuf + printed, outbufsize - printed, "%*s", 3 * remain, " ");
 			}
-			printf("| %s", ascii);
+			printed += snprintf(outbuf + printed, outbufsize - printed, "| %s", ascii);
 
 			if ((i + 1) != length)
-				printf("\n%*s", indent, " ");
+				printed += snprintf(outbuf + printed, outbufsize - printed, "\n%*s", indent, " ");
 		}
 	}
-	printf("\n");
+
+	return printed;
+}
+
+void
+rift_s_hexdump_buffer(const char *label, const unsigned char *buf, int length)
+{
+	char outbuf[16384] = "";
+	int bufsize = sizeof(outbuf) - 2;
+	int printed = 0;
+
+	printed += rift_s_snprintf_hexdump_buffer(outbuf, bufsize - printed, label, buf, length);
+
+	RIFT_S_DEBUG("%s", outbuf);
 }
 
 static int

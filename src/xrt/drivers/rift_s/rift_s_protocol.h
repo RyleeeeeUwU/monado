@@ -250,4 +250,7 @@ rift_s_read_devices_list(struct os_hid_device *handle, rift_s_devices_list_t *de
 
 void
 rift_s_hexdump_buffer(const char *label, const unsigned char *buf, int length); // Debugging
+int
+rift_s_snprintf_hexdump_buffer(
+    char *outbuf, size_t outbufsize, const char *label, const unsigned char *buf, int length); // Debugging
 #endif
