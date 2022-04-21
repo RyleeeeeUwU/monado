@@ -17,10 +17,10 @@
 #define KEEPALIVE_INTERVAL_MS 1000
 #define CAMERA_REPORT_INTERVAL_MS 1000
 
-#define RIFT_S_BUTTON_A 0x01
-#define RIFT_S_BUTTON_B 0x02
+#define RIFT_S_BUTTON_A_X 0x01
+#define RIFT_S_BUTTON_B_Y 0x02
 #define RIFT_S_BUTTON_STICK 0x04
-#define RIFT_S_BUTTON_OCULUS 0x08
+#define RIFT_S_BUTTON_MENU_OCULUS 0x08
 
 #define RIFT_S_BUTTON_UNKNOWN 0x10 // Unknown mask value seen sometimes. Low battery?
 

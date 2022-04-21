@@ -9,6 +9,7 @@
 
 #include "math/m_imu_3dof.h"
 
+#include "os/os_time.h"
 #include "xrt/xrt_device.h"
 
 #include "rift_s.h"
@@ -30,14 +31,17 @@ struct rift_s_controller
 {
 	struct xrt_device base;
 
+	struct os_mutex mutex;
+
 	struct xrt_pose pose;
 
 	/* The system this controller belongs to / receives reports from */
 	struct rift_s_system *sys;
 
 	uint64_t device_id;
-	uint32_t device_type;
+	rift_s_device_type device_type;
 
+	/* Debug logs */
 	/* 0x04 = new log line
 	 * 0x02 = parity bit, toggles each line when receiving log chars
 	 * other bits, unknown */
@@ -45,12 +49,23 @@ struct rift_s_controller
 	int log_bytes;
 	uint8_t log[MAX_LOG_SIZE];
 
+	/* IMU tracking */
 	bool imu_time_valid;
 	uint32_t imu_timestamp32;
-	uint64_t imu_timestamp;
+	timepoint_ns last_imu_device_time_ns;
+	timepoint_ns last_imu_local_time_ns;
+
 	uint16_t imu_unknown_varying2;
 	int16_t raw_accel[3];
 	int16_t raw_gyro[3];
+
+	struct xrt_vec3 accel;
+	struct xrt_vec3 gyro;
+	struct xrt_vec3 mag;
+	struct m_imu_3dof fusion;
+
+	/* Controls / buttons state */
+	timepoint_ns last_controls_local_time_ns;
 
 	/* 0x8, 0x0c 0x0d or 0xe block */
 	uint8_t mask08;
@@ -79,11 +94,6 @@ struct rift_s_controller
 	bool reading_calibration;
 	bool have_calibration;
 	rift_s_controller_imu_calibration calibration;
-
-	struct xrt_vec3 accel;
-	struct xrt_vec3 gyro;
-	struct xrt_vec3 mag;
-	struct m_imu_3dof fusion;
 };
 
 struct rift_s_controller *
@@ -92,6 +102,8 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 void
 rift_s_controller_update_configuration(struct rift_s_controller *ctrl);
 bool
-rift_s_controller_handle_report(struct rift_s_controller *ctrl, rift_s_controller_report_t *report);
+rift_s_controller_handle_report(struct rift_s_controller *ctrl,
+                                timepoint_ns local_ts,
+                                rift_s_controller_report_t *report);
 
 #endif

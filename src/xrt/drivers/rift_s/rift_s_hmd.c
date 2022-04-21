@@ -84,10 +84,12 @@ rift_s_get_view_poses(struct xrt_device *xdev,
 }
 
 void
-rift_s_hmd_handle_report(struct rift_s_hmd *hmd, rift_s_hmd_report_t *report)
+rift_s_hmd_handle_report(struct rift_s_hmd *hmd, timepoint_ns local_ts, rift_s_hmd_report_t *report)
 {
 	const uint32_t TICK_LEN_US = 1000000 / hmd->imu_config.imu_hz;
 	uint32_t dt = TICK_LEN_US;
+
+	os_mutex_lock(&hmd->mutex);
 
 	if (hmd->last_imu_timestamp_ns != 0) {
 		/* Avoid wrap-around on 32-bit device times */
@@ -96,6 +98,7 @@ rift_s_hmd_handle_report(struct rift_s_hmd *hmd, rift_s_hmd_report_t *report)
 		hmd->last_imu_timestamp_ns = report->timestamp;
 	}
 	hmd->last_imu_timestamp32 = report->timestamp;
+	hmd->last_imu_local_timestamp_ns = local_ts;
 
 	const float gyro_scale = 1.0 / hmd->imu_config.gyro_scale;
 	const float accel_scale = MATH_GRAVITY_M_S2 / hmd->imu_config.accel_scale;
@@ -140,7 +143,6 @@ rift_s_hmd_handle_report(struct rift_s_hmd *hmd, rift_s_hmd_report_t *report)
 		dt = TICK_LEN_US;
 	}
 
-	os_mutex_lock(&hmd->mutex);
 	hmd->pose.orientation = hmd->fusion.rot;
 	os_mutex_unlock(&hmd->mutex);
 }

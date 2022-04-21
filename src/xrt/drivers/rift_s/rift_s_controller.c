@@ -29,14 +29,63 @@
 
 #define DEG_TO_RAD(D) ((D)*M_PI / 180.)
 
+static struct xrt_binding_input_pair simple_inputs_rift_s[4] = {
+    {XRT_INPUT_SIMPLE_SELECT_CLICK, XRT_INPUT_TOUCH_TRIGGER_VALUE},
+    {XRT_INPUT_SIMPLE_MENU_CLICK, XRT_INPUT_TOUCH_MENU_CLICK},
+    {XRT_INPUT_SIMPLE_GRIP_POSE, XRT_INPUT_TOUCH_GRIP_POSE},
+    {XRT_INPUT_SIMPLE_AIM_POSE, XRT_INPUT_TOUCH_AIM_POSE},
+};
+
+static struct xrt_binding_output_pair simple_outputs_rift_s[1] = {
+    {XRT_OUTPUT_NAME_SIMPLE_VIBRATION, XRT_OUTPUT_NAME_TOUCH_HAPTIC},
+};
+
+static struct xrt_binding_profile binding_profiles_rift_s[1] = {
+    {
+        .name = XRT_DEVICE_SIMPLE_CONTROLLER,
+        .inputs = simple_inputs_rift_s,
+        .input_count = ARRAY_SIZE(simple_inputs_rift_s),
+        .outputs = simple_outputs_rift_s,
+        .output_count = ARRAY_SIZE(simple_outputs_rift_s),
+    },
+};
+
+enum touch_controller_input_index
+{
+	/* Left controller */
+	OCULUS_TOUCH_X_CLICK = 0,
+	OCULUS_TOUCH_X_TOUCH,
+	OCULUS_TOUCH_Y_CLICK,
+	OCULUS_TOUCH_Y_TOUCH,
+	OCULUS_TOUCH_MENU_CLICK,
+
+	/* Right controller */
+	OCULUS_TOUCH_A_CLICK = 0,
+	OCULUS_TOUCH_A_TOUCH,
+	OCULUS_TOUCH_B_CLICK,
+	OCULUS_TOUCH_B_TOUCH,
+	OCULUS_TOUCH_SYSTEM_CLICK,
+
+	/* Common */
+	OCULUS_TOUCH_SQUEEZE_VALUE,
+	OCULUS_TOUCH_TRIGGER_TOUCH,
+	OCULUS_TOUCH_TRIGGER_VALUE,
+	OCULUS_TOUCH_THUMBSTICK_CLICK,
+	OCULUS_TOUCH_THUMBSTICK_TOUCH,
+	OCULUS_TOUCH_THUMBSTICK,
+	OCULUS_TOUCH_THUMBREST_TOUCH,
+	OCULUS_TOUCH_GRIP_POSE,
+	OCULUS_TOUCH_AIM_POSE,
+
+	INPUT_INDICES_LAST
+};
+#define SET_TOUCH_INPUT(d, NAME) ((d)->base.inputs[OCULUS_TOUCH_##NAME].name = XRT_INPUT_TOUCH_##NAME)
+
 #if DUMP_CONTROLLER_STATE
 static void
 print_controller_state(struct rift_s_controller *ctrl)
 {
 	/* Dump the controller state if we see something unexpected / unknown, otherwise be quiet */
-	if (ctrl->device_type == 0)
-		return; // We don't know this device fully yet. Ignore it
-
 	if (ctrl->extra_bytes_len == 0 && ctrl->mask08 == 0x50 && ctrl->mask0e == 0)
 		return;
 
@@ -68,19 +117,22 @@ print_controller_state(struct rift_s_controller *ctrl)
 
 static void
 handle_imu_update(struct rift_s_controller *ctrl,
+                  timepoint_ns local_ts,
                   uint32_t imu_timestamp,
                   const int16_t raw_accel[3],
                   const int16_t raw_gyro[3])
 {
+	/* Logic to update 64-bit ns timestamp from
+	 * 32-bit µS device timestamp that wraps every 71.5 minutes */
 	if (ctrl->imu_time_valid) {
 		uint32_t dt = imu_timestamp - ctrl->imu_timestamp32;
-		ctrl->imu_timestamp += dt;
+		ctrl->last_imu_device_time_ns += (timepoint_ns)dt * OS_NS_PER_USEC;
 	} else {
-		ctrl->imu_timestamp = imu_timestamp;
+		ctrl->last_imu_device_time_ns = (timepoint_ns)imu_timestamp * OS_NS_PER_USEC;
 		ctrl->imu_time_valid = true;
 	}
-
 	ctrl->imu_timestamp32 = imu_timestamp;
+	ctrl->last_imu_local_time_ns = local_ts;
 
 	if (!ctrl->have_calibration || !ctrl->have_config)
 		return; /* We need to finish reading the calibration or config blocks first */
@@ -105,7 +157,8 @@ handle_imu_update(struct rift_s_controller *ctrl,
 	math_matrix_3x3_transform_vec3(&ctrl->calibration.accel.rectification, &accel, &ctrl->accel);
 	math_matrix_3x3_transform_vec3(&ctrl->calibration.gyro.rectification, &gyro, &ctrl->gyro);
 
-	m_imu_3dof_update(&ctrl->fusion, ctrl->imu_timestamp, &ctrl->accel, &ctrl->gyro);
+	m_imu_3dof_update(&ctrl->fusion, ctrl->last_imu_device_time_ns, &ctrl->accel, &ctrl->gyro);
+	ctrl->pose.orientation = ctrl->fusion.rot;
 
 #if 0
 	printf ("dt = %f raw accel %d %d %d gyro %d %d %d -> accel %f %f %f  gyro %f %f %f\n",
@@ -118,11 +171,16 @@ handle_imu_update(struct rift_s_controller *ctrl,
 }
 
 bool
-rift_s_controller_handle_report(struct rift_s_controller *ctrl, rift_s_controller_report_t *report)
+rift_s_controller_handle_report(struct rift_s_controller *ctrl,
+                                timepoint_ns local_ts,
+                                rift_s_controller_report_t *report)
 {
 #if DUMP_CONTROLLER_STATE
 	bool saw_imu_update = false;
 #endif
+	bool saw_controls_update = false;
+
+	os_mutex_lock(&ctrl->mutex);
 
 	/* Collect state updates */
 	ctrl->extra_bytes_len = 0;
@@ -131,21 +189,36 @@ rift_s_controller_handle_report(struct rift_s_controller *ctrl, rift_s_controlle
 		rift_s_controller_info_block_t *info = report->info + i;
 
 		switch (info->block_id) {
-		case RIFT_S_CTRL_MASK08: ctrl->mask08 = info->maskbyte.val; break;
-		case RIFT_S_CTRL_BUTTONS: ctrl->buttons = info->maskbyte.val; break;
-		case RIFT_S_CTRL_FINGERS: ctrl->fingers = info->maskbyte.val; break;
-		case RIFT_S_CTRL_MASK0e: ctrl->mask0e = info->maskbyte.val; break;
+		case RIFT_S_CTRL_MASK08:
+			saw_controls_update = true;
+			ctrl->mask08 = info->maskbyte.val;
+			break;
+		case RIFT_S_CTRL_BUTTONS:
+			saw_controls_update = true;
+			ctrl->buttons = info->maskbyte.val;
+			break;
+		case RIFT_S_CTRL_FINGERS:
+			saw_controls_update = true;
+			ctrl->fingers = info->maskbyte.val;
+			break;
+		case RIFT_S_CTRL_MASK0e:
+			saw_controls_update = true;
+			ctrl->mask0e = info->maskbyte.val;
+			break;
 		case RIFT_S_CTRL_TRIGGRIP: {
+			saw_controls_update = true;
 			ctrl->trigger = (uint16_t)(info->triggrip.vals[1] & 0x0f) << 8 | info->triggrip.vals[0];
 			ctrl->grip =
 			    (uint16_t)(info->triggrip.vals[1] & 0xf0) >> 4 | ((uint16_t)(info->triggrip.vals[2]) << 4);
 			break;
 		}
 		case RIFT_S_CTRL_JOYSTICK:
+			saw_controls_update = true;
 			ctrl->joystick_x = info->joystick.val;
 			ctrl->joystick_y = info->joystick.val >> 16;
 			break;
 		case RIFT_S_CTRL_CAPSENSE:
+			saw_controls_update = true;
 			ctrl->capsense_a_x = info->capsense.a_x;
 			ctrl->capsense_b_y = info->capsense.b_y;
 			ctrl->capsense_joystick = info->capsense.joystick;
@@ -167,26 +240,27 @@ rift_s_controller_handle_report(struct rift_s_controller *ctrl, rift_s_controlle
 				ctrl->raw_accel[j] = info->imu.accel[j];
 				ctrl->raw_gyro[j] = info->imu.gyro[j];
 			}
-			handle_imu_update(ctrl, info->imu.timestamp, ctrl->raw_accel, ctrl->raw_gyro);
+			handle_imu_update(ctrl, local_ts, info->imu.timestamp, ctrl->raw_accel, ctrl->raw_gyro);
 			break;
 		}
 		default:
 			RIFT_S_WARN("Invalid controller info block with ID %02x from device %08" PRIx64
 			            ". Please report it.\n",
 			            info->block_id, ctrl->device_id);
-			return false;
 		}
 	}
 
+	if (saw_controls_update)
+		ctrl->last_controls_local_time_ns = local_ts;
+
 	if (report->extra_bytes_len > 0) {
-		if (report->extra_bytes_len <= sizeof(ctrl->extra_bytes))
-			memcpy(ctrl->extra_bytes, report->extra_bytes, report->extra_bytes_len);
-		else {
+		if (report->extra_bytes_len > sizeof(ctrl->extra_bytes)) {
 			RIFT_S_WARN("Controller report from %16" PRIx64 " had too many extra bytes - %u (max %u)\n",
 			            ctrl->device_id, report->extra_bytes_len,
 			            (unsigned int)(sizeof(ctrl->extra_bytes)));
-			return false;
+			report->extra_bytes_len = sizeof(ctrl->extra_bytes);
 		}
+		memcpy(ctrl->extra_bytes, report->extra_bytes, report->extra_bytes_len);
 	}
 	ctrl->extra_bytes_len = report->extra_bytes_len;
 
@@ -208,7 +282,7 @@ rift_s_controller_handle_report(struct rift_s_controller *ctrl, rift_s_controlle
 				if (ctrl->log_bytes == (MAX_LOG_SIZE - 1)) {
 					/* Log line got too long... output it */
 					ctrl->log[MAX_LOG_SIZE - 1] = '\0';
-					RIFT_S_DEBUG("Controller: %s\n", ctrl->log);
+					RIFT_S_DEBUG("Controller: %s", ctrl->log);
 					ctrl->log_bytes = 0;
 				}
 				ctrl->log[ctrl->log_bytes++] = c;
@@ -222,6 +296,7 @@ rift_s_controller_handle_report(struct rift_s_controller *ctrl, rift_s_controlle
 	}
 	ctrl->log_flags = report->flags;
 
+	os_mutex_unlock(&ctrl->mutex);
 	return true;
 }
 
@@ -289,86 +364,69 @@ ctrl_json_cb(bool success, uint8_t *response_bytes, int response_bytes_len, stru
 	}
 }
 
-#if 0 // FIXME
 static void
-init_touch_device(rift_s_controller_device *touch, int id)
+rift_s_update_input_click(struct rift_s_controller *ctrl, int index, int64_t when_ns, int val)
 {
-	ohmd_device *ohmd_dev = &touch->base.base;
-
-	touch->device_num = -1;
-
-	ohmd_set_default_device_properties(&ohmd_dev->properties);
-
-	ohmd_dev->properties.control_count = 8;
-
-	if (id == 1) { // Right controller
-		ohmd_dev->properties.controls_hints[0] = OHMD_BUTTON_A;
-		ohmd_dev->properties.controls_hints[1] = OHMD_BUTTON_B;
-		ohmd_dev->properties.controls_hints[2] = OHMD_HOME;         // Oculus button
-		ohmd_dev->properties.controls_hints[3] = OHMD_ANALOG_PRESS; // stick button
-	} else {
-		ohmd_dev->properties.controls_hints[0] = OHMD_BUTTON_X;
-		ohmd_dev->properties.controls_hints[1] = OHMD_BUTTON_Y;
-		ohmd_dev->properties.controls_hints[2] = OHMD_MENU;
-		ohmd_dev->properties.controls_hints[3] = OHMD_ANALOG_PRESS; // stick button
-	}
-	ohmd_dev->properties.controls_hints[4] = OHMD_TRIGGER;
-	ohmd_dev->properties.controls_hints[5] = OHMD_SQUEEZE;
-	ohmd_dev->properties.controls_hints[6] = OHMD_ANALOG_X;
-	ohmd_dev->properties.controls_hints[7] = OHMD_ANALOG_Y;
-
-	ohmd_dev->properties.controls_types[0] = OHMD_DIGITAL;
-	ohmd_dev->properties.controls_types[1] = OHMD_DIGITAL;
-	ohmd_dev->properties.controls_types[2] = OHMD_DIGITAL;
-	ohmd_dev->properties.controls_types[3] = OHMD_DIGITAL;
-
-	ohmd_dev->properties.controls_types[4] = OHMD_ANALOG;
-	ohmd_dev->properties.controls_types[5] = OHMD_ANALOG;
-	ohmd_dev->properties.controls_types[6] = OHMD_ANALOG;
-	ohmd_dev->properties.controls_types[7] = OHMD_ANALOG;
+	ctrl->base.inputs[index].timestamp = when_ns;
+	ctrl->base.inputs[index].value.boolean = (val != 0);
 }
 
-static int
-getf_touch_controller(ohmd_device *device, ohmd_float_value type, float *out)
+static void
+rift_s_update_input_analog(struct rift_s_controller *ctrl, int index, int64_t when_ns, float val)
 {
-	rift_s_device_priv *dev_priv = rift_s_device_priv_get(device);
-	struct rift_s_hmd *hmd = dev_priv->sys;
-	rift_s_controller_device *touch = (rift_s_controller_device *)(dev_priv);
-
-	if (touch->device_num < 0)
-		return -1; /* Device not online yet */
-
-	struct rift_s_controller *ctrl = hmd->controllers + touch->device_num;
-
-	switch (type) {
-	case OHMD_ROTATION_QUAT: {
-		*(quatf *)out = ctrl->imu_fusion.orient;
-		break;
-	}
-	case OHMD_POSITION_VECTOR: out[0] = out[1] = out[2] = 0; break;
-	case OHMD_DISTORTION_K: return -1;
-	case OHMD_CONTROLS_STATE:
-		out[0] = (ctrl->buttons & RIFT_S_BUTTON_A) != 0 ? 1.0 : 0.0;
-		out[1] = (ctrl->buttons & RIFT_S_BUTTON_B) != 0 ? 1.0 : 0.0;
-		out[2] = (ctrl->buttons & RIFT_S_BUTTON_OCULUS) != 0 ? 1.0 : 0.0;
-		out[3] = (ctrl->buttons & RIFT_S_BUTTON_STICK) != 0 ? 1.0 : 0.0;
-
-		out[4] = 1.0 - (float)(ctrl->trigger) / 4096.0;
-		out[5] = 1.0 - (float)(ctrl->grip) / 4096.0;
-		out[6] = (float)(ctrl->joystick_x) / 32768.0; /* FIXME: Scale this properly */
-		out[7] = (float)(ctrl->joystick_y) / 32768.0; /* FIXME: Scale this properly */
-		break;
-	default: ohmd_set_error(hmd->ctx, "invalid type given to getf (%u)", type); return -1;
-	}
-
-	return 0;
+	ctrl->base.inputs[index].timestamp = when_ns;
+	ctrl->base.inputs[index].value.vec1.x = val;
 }
-#endif
+
+static void
+rift_s_update_input_vec2(struct rift_s_controller *ctrl, int index, int64_t when_ns, float x, float y)
+{
+	ctrl->base.inputs[index].timestamp = when_ns;
+	ctrl->base.inputs[index].value.vec1.x = x;
+	ctrl->base.inputs[index].value.vec1.x = y;
+}
 
 static void
 rift_s_controller_update_inputs(struct xrt_device *xdev)
 {
-	// Empty, you should put code to update the attached input fields (if any)
+	struct rift_s_controller *ctrl = (struct rift_s_controller *)(xdev);
+
+	os_mutex_lock(&ctrl->mutex);
+
+	uint64_t last_ns = ctrl->last_controls_local_time_ns;
+
+	if (ctrl->device_type == RIFT_S_DEVICE_LEFT_CONTROLLER) {
+		rift_s_update_input_click(ctrl, OCULUS_TOUCH_X_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_A_X);
+		rift_s_update_input_click(ctrl, OCULUS_TOUCH_Y_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_B_Y);
+		rift_s_update_input_click(ctrl, OCULUS_TOUCH_MENU_CLICK, last_ns,
+		                          ctrl->buttons & RIFT_S_BUTTON_MENU_OCULUS);
+	} else {
+		rift_s_update_input_click(ctrl, OCULUS_TOUCH_A_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_A_X);
+		rift_s_update_input_click(ctrl, OCULUS_TOUCH_B_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_B_Y);
+		rift_s_update_input_click(ctrl, OCULUS_TOUCH_SYSTEM_CLICK, last_ns,
+		                          ctrl->buttons & RIFT_S_BUTTON_MENU_OCULUS);
+	}
+
+	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_SQUEEZE_VALUE, last_ns, 1.0 - (float)(ctrl->grip) / 4096.0);
+	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_TRIGGER_VALUE, last_ns, 1.0 - (float)(ctrl->grip) / 4096.0);
+
+	rift_s_update_input_click(ctrl, OCULUS_TOUCH_THUMBSTICK_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_STICK);
+	rift_s_update_input_vec2(ctrl, OCULUS_TOUCH_THUMBSTICK, last_ns,
+	                         (float)(ctrl->joystick_x) / 32768.0, /* FIXME: Scale this properly */
+	                         (float)(ctrl->joystick_y) / 32768.0  /* FIXME: Scale this properly */
+	);
+
+	/* FIXME: Output touch detections:
+	      OCULUS_TOUCH_X_TOUCH,
+	      OCULUS_TOUCH_Y_TOUCH,
+	      OCULUS_TOUCH_A_TOUCH,
+	      OCULUS_TOUCH_B_TOUCH,
+	      OCULUS_TOUCH_TRIGGER_TOUCH,
+	      OCULUS_TOUCH_THUMBSTICK_TOUCH,
+	      OCULUS_TOUCH_THUMBREST_TOUCH,
+	*/
+
+	os_mutex_unlock(&ctrl->mutex);
 }
 
 static void
@@ -379,17 +437,19 @@ rift_s_controller_get_tracked_pose(struct xrt_device *xdev,
 {
 	struct rift_s_controller *ctrl = (struct rift_s_controller *)(xdev);
 
-	if (name != XRT_INPUT_GENERIC_HEAD_POSE) {
-		RIFT_S_ERROR("unknown input name");
+	if (name != XRT_INPUT_TOUCH_AIM_POSE && name != XRT_INPUT_TOUCH_GRIP_POSE) {
+		RIFT_S_ERROR("unknown pose name requested");
 		return;
 	}
 
+	os_mutex_lock(&ctrl->mutex);
 	// Estimate pose at timestamp at_timestamp_ns!
 	math_quat_normalize(&ctrl->pose.orientation);
 	out_relation->pose = ctrl->pose;
 	out_relation->relation_flags = (enum xrt_space_relation_flags)(XRT_SPACE_RELATION_ORIENTATION_VALID_BIT |
 	                                                               XRT_SPACE_RELATION_POSITION_VALID_BIT |
 	                                                               XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT);
+	os_mutex_unlock(&ctrl->mutex);
 }
 
 static void
@@ -418,6 +478,8 @@ rift_s_controller_destroy(struct xrt_device *xdev)
 
 	m_imu_3dof_close(&ctrl->fusion);
 
+	os_mutex_destroy(&ctrl->mutex);
+
 	u_device_free(&ctrl->base);
 }
 
@@ -428,13 +490,15 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 
 	enum u_device_alloc_flags flags = (enum u_device_alloc_flags)(U_DEVICE_ALLOC_TRACKING_NONE);
 
-	struct rift_s_controller *ctrl = U_DEVICE_ALLOCATE(struct rift_s_controller, flags, 1, 0);
+	struct rift_s_controller *ctrl = U_DEVICE_ALLOCATE(struct rift_s_controller, flags, INPUT_INDICES_LAST, 1);
 	if (ctrl == NULL) {
 		return NULL;
 	}
 
 	/* Store a ref to the parent hmd, released in destroy */
 	rift_s_system_reference(&ctrl->sys, sys);
+
+	os_mutex_init(&ctrl->mutex);
 
 	ctrl->base.update_inputs = rift_s_controller_update_inputs;
 	ctrl->base.get_tracked_pose = rift_s_controller_get_tracked_pose;
@@ -443,6 +507,12 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	ctrl->base.name = XRT_DEVICE_TOUCH_CONTROLLER;
 	ctrl->base.device_type = device_type;
 
+	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
+		ctrl->device_type = RIFT_S_DEVICE_LEFT_CONTROLLER;
+	} else {
+		ctrl->device_type = RIFT_S_DEVICE_RIGHT_CONTROLLER;
+	}
+
 	ctrl->pose.orientation.w = 1.0f; // All other values set to zero by U_DEVICE_ALLOCATE (which calls U_CALLOC)
 	m_imu_3dof_init(&ctrl->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 
@@ -450,9 +520,35 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	snprintf(ctrl->base.str, XRT_DEVICE_NAME_LEN, "Oculus Rift S Touch Controller");
 	snprintf(ctrl->base.serial, XRT_DEVICE_NAME_LEN, "FIXME S/N");
 
-	// Setup input. FIXME: Add all inputs and AIM+GRIP pose
-	ctrl->base.inputs[0].name = XRT_INPUT_TOUCH_AIM_POSE;
+	// Setup inputs and outputs
+	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
+		SET_TOUCH_INPUT(ctrl, X_CLICK);
+		SET_TOUCH_INPUT(ctrl, X_TOUCH);
+		SET_TOUCH_INPUT(ctrl, Y_CLICK);
+		SET_TOUCH_INPUT(ctrl, Y_TOUCH);
+		SET_TOUCH_INPUT(ctrl, MENU_CLICK);
+	} else {
+		SET_TOUCH_INPUT(ctrl, A_CLICK);
+		SET_TOUCH_INPUT(ctrl, A_TOUCH);
+		SET_TOUCH_INPUT(ctrl, B_CLICK);
+		SET_TOUCH_INPUT(ctrl, B_TOUCH);
+		SET_TOUCH_INPUT(ctrl, SYSTEM_CLICK);
+	}
 
+	SET_TOUCH_INPUT(ctrl, SQUEEZE_VALUE);
+	SET_TOUCH_INPUT(ctrl, TRIGGER_TOUCH);
+	SET_TOUCH_INPUT(ctrl, TRIGGER_VALUE);
+	SET_TOUCH_INPUT(ctrl, THUMBSTICK_CLICK);
+	SET_TOUCH_INPUT(ctrl, THUMBSTICK_TOUCH);
+	SET_TOUCH_INPUT(ctrl, THUMBSTICK);
+	SET_TOUCH_INPUT(ctrl, THUMBREST_TOUCH);
+	SET_TOUCH_INPUT(ctrl, GRIP_POSE);
+	SET_TOUCH_INPUT(ctrl, AIM_POSE);
+
+	ctrl->base.outputs[0].name = XRT_OUTPUT_NAME_TOUCH_HAPTIC;
+
+	ctrl->base.binding_profiles = binding_profiles_rift_s;
+	ctrl->base.binding_profile_count = ARRAY_SIZE(binding_profiles_rift_s);
 	return ctrl;
 }
 

@@ -22,6 +22,7 @@
 #include "xrt/xrt_defines.h"
 #include "xrt/xrt_tracking.h"
 
+#include "rift_s_protocol.h"
 #include "rift_s_radio.h"
 
 #ifndef RIFT_S_H
@@ -48,7 +49,7 @@ extern enum u_logging_level rift_s_log_level;
 struct rift_s_tracked_device
 {
 	uint64_t device_id;
-	uint32_t device_type;
+	rift_s_device_type device_type;
 };
 
 struct rift_s_system

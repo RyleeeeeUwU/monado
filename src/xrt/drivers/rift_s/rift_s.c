@@ -251,8 +251,6 @@ update_tracked_device_types(struct rift_s_system *sys)
 			if (sys->tracked_device[d].device_id == dev->device_id) {
 				if (sys->tracked_device[d].device_type != dev->device_type) {
 					sys->tracked_device[d].device_type = dev->device_type;
-					/* FIXME: Device type changed - copy the device_id to the actual
-					 * controller device */
 				}
 				break;
 			}
@@ -267,7 +265,7 @@ update_tracked_device_types(struct rift_s_system *sys)
 }
 
 static void
-handle_hmd_report(struct rift_s_system *sys, const unsigned char *buf, int size)
+handle_hmd_report(struct rift_s_system *sys, timepoint_ns local_ts, const unsigned char *buf, int size)
 {
 	rift_s_hmd_report_t report;
 
@@ -277,13 +275,13 @@ handle_hmd_report(struct rift_s_system *sys, const unsigned char *buf, int size)
 
 	os_mutex_lock(&sys->dev_mutex);
 	if (sys->hmd != NULL) {
-		rift_s_hmd_handle_report(sys->hmd, &report);
+		rift_s_hmd_handle_report(sys->hmd, local_ts, &report);
 	}
 	os_mutex_unlock(&sys->dev_mutex);
 }
 
 static void
-handle_controller_report(struct rift_s_system *sys, const unsigned char *buf, int size)
+handle_controller_report(struct rift_s_system *sys, timepoint_ns local_ts, const unsigned char *buf, int size)
 {
 	rift_s_controller_report_t report;
 
@@ -338,7 +336,7 @@ handle_controller_report(struct rift_s_system *sys, const unsigned char *buf, in
 	if (ctrl != NULL) {
 		rift_s_controller_update_configuration(ctrl);
 
-		if (!rift_s_controller_handle_report(ctrl, &report)) {
+		if (!rift_s_controller_handle_report(ctrl, local_ts, &report)) {
 			rift_s_hexdump_buffer("Invalid Controller Report Content", buf, size);
 		}
 	}
@@ -351,7 +349,7 @@ handle_packets(struct rift_s_system *sys)
 	unsigned char buf[FEATURE_BUFFER_SIZE];
 
 	// Handle keep alive messages
-	uint64_t now = os_monotonic_get_ns();
+	timepoint_ns now = os_monotonic_get_ns();
 
 	if ((now - sys->last_keep_alive) / U_TIME_1MS_IN_NS >= KEEPALIVE_INTERVAL_MS) {
 		// send keep alive message
@@ -374,10 +372,12 @@ handle_packets(struct rift_s_system *sys)
 				break; // No more messages, return.
 			}
 
+			now = os_monotonic_get_ns();
+
 			if (buf[0] == 0x65)
-				handle_hmd_report(sys, buf, size);
+				handle_hmd_report(sys, now, buf, size);
 			else if (buf[0] == 0x67)
-				handle_controller_report(sys, buf, size);
+				handle_controller_report(sys, now, buf, size);
 			else if (buf[0] == 0x66) {
 				/* System state packet. Enable the screen if the prox sensor is
 				 * triggered. FIXME: Move to the HMD */

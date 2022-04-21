@@ -37,7 +37,8 @@ struct rift_s_hmd
 	/* 3DOF fusion */
 	struct os_mutex mutex;
 	uint32_t last_imu_timestamp32; /* 32-bit µS device timestamp */
-	uint64_t last_imu_timestamp_ns;
+	timepoint_ns last_imu_timestamp_ns;
+	timepoint_ns last_imu_local_timestamp_ns;
 	struct m_imu_3dof fusion;
 	struct xrt_pose pose;
 	struct xrt_vec3 raw_mag, raw_accel, raw_gyro;
@@ -58,6 +59,6 @@ struct rift_s_hmd
 struct rift_s_hmd *
 rift_s_hmd_create(struct rift_s_system *sys);
 void
-rift_s_hmd_handle_report(struct rift_s_hmd *hmd, rift_s_hmd_report_t *report);
+rift_s_hmd_handle_report(struct rift_s_hmd *hmd, timepoint_ns local_ts, rift_s_hmd_report_t *report);
 
 #endif
