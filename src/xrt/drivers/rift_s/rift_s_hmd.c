@@ -354,6 +354,7 @@ rift_s_hmd_create(struct rift_s_system *sys)
 	hmd->base.hmd->distortion.models = XRT_DISTORTION_MODEL_COMPUTE;
 	hmd->base.hmd->distortion.preferred = XRT_DISTORTION_MODEL_COMPUTE;
 	hmd->base.compute_distortion = rift_s_compute_distortion;
+	u_distortion_mesh_fill_in_compute(&hmd->base);
 
 	/* Set Opaque blend mode */
 	hmd->base.hmd->blend_modes[0] = XRT_BLEND_MODE_OPAQUE;
