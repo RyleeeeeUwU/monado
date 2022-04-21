@@ -313,7 +313,7 @@ rift_s_hmd_create(struct rift_s_system *sys)
 	hmd->base.hmd->views[1].viewport.y_pixels = view_h;
 
 	/* FIXME: Incorrection distortion taken from the Rift CV1 for now */
-	const double display_w_meters = 0.149760f;
+	const double display_w_meters = 0.149760f / 2.0; // Per-eye width
 	const double display_h_meters = 0.093600f;
 	const double lens_sep = 0.074f;
 	const double hFOV = DEG_TO_RAD(105.0);
@@ -328,7 +328,7 @@ rift_s_hmd_create(struct rift_s_system *sys)
 	    .scale = display_w_meters -
 	             lens_sep / 2.0, // Assume distortion is across the larger distance from lens center to edge
 	    .lens_center = {display_w_meters - hCOP, vCOP},
-	    .viewport_size = {view_w, view_h},
+	    .viewport_size = {display_w_meters, display_h_meters},
 	};
 
 	if (
