@@ -128,7 +128,7 @@ print_controller_state(struct rift_s_controller *ctrl)
 		                                          ctrl->extra_bytes_len);
 	}
 
-	RIFT_S_TRACE(buf);
+	RIFT_S_TRACE("%s", buf);
 }
 #endif
 
