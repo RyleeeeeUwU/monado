@@ -100,7 +100,7 @@ struct rift_s_controller *
 rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_type);
 
 void
-rift_s_controller_update_configuration(struct rift_s_controller *ctrl);
+rift_s_controller_update_configuration(struct rift_s_controller *ctrl, uint64_t device_id);
 bool
 rift_s_controller_handle_report(struct rift_s_controller *ctrl,
                                 timepoint_ns local_ts,

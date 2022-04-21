@@ -580,9 +580,15 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 }
 
 void
-rift_s_controller_update_configuration(struct rift_s_controller *ctrl)
+rift_s_controller_update_configuration(struct rift_s_controller *ctrl, uint64_t device_id)
 {
 	rift_s_radio_state *radio = rift_s_system_radio(ctrl->sys);
+
+	if (ctrl->device_id != device_id) {
+		ctrl->device_id = device_id;
+		// If the device ID changed somehow, re-read the JSON blocks
+		ctrl->have_config = ctrl->have_calibration = false;
+	}
 
 	if (!ctrl->have_config && !ctrl->reading_config) {
 		const uint8_t config_req[] = {0x32, 0x20, 0xe8, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};

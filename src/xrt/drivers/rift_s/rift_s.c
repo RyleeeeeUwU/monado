@@ -336,7 +336,7 @@ handle_controller_report(struct rift_s_system *sys, timepoint_ns local_ts, const
 	}
 
 	if (ctrl != NULL) {
-		rift_s_controller_update_configuration(ctrl);
+		rift_s_controller_update_configuration(ctrl, td->device_id);
 
 		if (!rift_s_controller_handle_report(ctrl, local_ts, &report)) {
 			rift_s_hexdump_buffer("Invalid Controller Report Content", buf, size);
