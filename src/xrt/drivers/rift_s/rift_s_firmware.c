@@ -199,7 +199,6 @@ rift_s_controller_parse_imu_calibration(char *json_string, rift_s_controller_imu
 		goto fail;
 	}
 
-	/* FIXME: Array foreach */
 	c->num_leds = cJSON_GetArraySize(leds);
 	c->leds = calloc(c->num_leds, sizeof(rift_s_led));
 	i = 0;
