@@ -78,7 +78,15 @@ rift_s_found(struct xrt_prober *xp,
 		return -1;
 	}
 
-	struct rift_s_system *sys = rift_s_system_create(hid_hmd, hid_status, hid_controllers);
+	unsigned char hmd_serial_no[XRT_DEVICE_NAME_LEN];
+	result = xrt_prober_get_string_descriptor(xp, dev_hmd, XRT_PROBER_STRING_SERIAL_NUMBER, hmd_serial_no,
+	                                          XRT_DEVICE_NAME_LEN);
+	if (result < 0) {
+		RIFT_S_WARN("Could not read Rift S serial number from USB");
+		snprintf((char *)hmd_serial_no, XRT_DEVICE_NAME_LEN, "Unknown");
+	}
+
+	struct rift_s_system *sys = rift_s_system_create(hmd_serial_no, hid_hmd, hid_status, hid_controllers);
 	if (sys == NULL) {
 		RIFT_S_ERROR("Failed to initialise Oculus Rift S driver");
 		return -1;

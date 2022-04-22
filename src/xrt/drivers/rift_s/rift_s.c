@@ -52,7 +52,8 @@ static void
 rift_s_system_free(struct rift_s_system *sys);
 
 struct rift_s_system *
-rift_s_system_create(struct os_hid_device *hid_hmd,
+rift_s_system_create(const unsigned char *hmd_serial_no,
+                     struct os_hid_device *hid_hmd,
                      struct os_hid_device *hid_status,
                      struct os_hid_device *hid_controllers)
 {
@@ -90,7 +91,7 @@ rift_s_system_create(struct os_hid_device *hid_hmd,
 
 	/* Create the HMD now. Controllers are created in the
 	 * rift_s_system_get_controller() call later */
-	struct rift_s_hmd *hmd = rift_s_hmd_create(sys);
+	struct rift_s_hmd *hmd = rift_s_hmd_create(sys, hmd_serial_no);
 	if (hmd == NULL) {
 		RIFT_S_ERROR("Failed to create Oculus Rift S device.");
 		goto cleanup;
@@ -211,11 +212,13 @@ rift_s_system_get_controller(struct rift_s_system *sys, int index)
 	assert(index >= 0 || index < MAX_TRACKED_DEVICES);
 	assert(sys->controllers[index] == NULL); // Ensure only called once per controller
 
+	os_mutex_lock(&sys->dev_mutex);
 	if (index == 0) {
 		sys->controllers[0] = rift_s_controller_create(sys, XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER);
 	} else {
 		sys->controllers[1] = rift_s_controller_create(sys, XRT_DEVICE_TYPE_RIGHT_HAND_CONTROLLER);
 	}
+	os_mutex_unlock(&sys->dev_mutex);
 
 	return (struct xrt_device *)sys->controllers[index];
 }

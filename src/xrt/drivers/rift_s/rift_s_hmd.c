@@ -225,7 +225,7 @@ rift_s_hmd_destroy(struct xrt_device *xdev)
 }
 
 struct rift_s_hmd *
-rift_s_hmd_create(struct rift_s_system *sys)
+rift_s_hmd_create(struct rift_s_system *sys, const unsigned char *hmd_serial_no)
 {
 	int ret;
 
@@ -263,7 +263,7 @@ rift_s_hmd_create(struct rift_s_system *sys)
 
 	// Print name.
 	snprintf(hmd->base.str, XRT_DEVICE_NAME_LEN, "Oculus Rift S");
-	snprintf(hmd->base.serial, XRT_DEVICE_NAME_LEN, "FIXME S/N");
+	snprintf(hmd->base.serial, XRT_DEVICE_NAME_LEN, "%s", hmd_serial_no);
 
 	// Setup input.
 	hmd->base.inputs[0].name = XRT_INPUT_GENERIC_HEAD_POSE;
@@ -301,7 +301,6 @@ rift_s_hmd_create(struct rift_s_system *sys)
 
 #if 0
 	dump_fw_block(hid_hmd, 0xB);
-	dump_fw_block(hid_hmd, 0xD);
 	dump_fw_block(hid_hmd, 0xF);
 	dump_fw_block(hid_hmd, 0x10);
 	dump_fw_block(hid_hmd, 0x12);
@@ -392,6 +391,7 @@ rift_s_hmd_create(struct rift_s_system *sys)
 	u_var_add_pose(hmd, &hmd->pose, "pose");
 	u_var_add_log_level(hmd, &rift_s_log_level, "log_level");
 
+	RIFT_S_DEBUG("Oculus Rift S HMD serial %s initialised.", hmd_serial_no);
 
 	return hmd;
 

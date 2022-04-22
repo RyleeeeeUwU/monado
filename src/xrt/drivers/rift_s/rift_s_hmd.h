@@ -58,7 +58,7 @@ struct rift_s_hmd
 };
 
 struct rift_s_hmd *
-rift_s_hmd_create(struct rift_s_system *sys);
+rift_s_hmd_create(struct rift_s_system *sys, const unsigned char *hmd_serial_no);
 void
 rift_s_hmd_handle_report(struct rift_s_hmd *hmd, timepoint_ns local_ts, rift_s_hmd_report_t *report);
 void

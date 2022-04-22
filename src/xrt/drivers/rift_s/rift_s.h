@@ -80,7 +80,8 @@ struct rift_s_system
 };
 
 struct rift_s_system *
-rift_s_system_create(struct os_hid_device *hid_hmd,
+rift_s_system_create(const unsigned char *hmd_serial_no,
+                     struct os_hid_device *hid_hmd,
                      struct os_hid_device *hid_status,
                      struct os_hid_device *hid_controllers);
 
