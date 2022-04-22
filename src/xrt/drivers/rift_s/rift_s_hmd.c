@@ -188,6 +188,22 @@ read_hmd_calibration(struct rift_s_hmd *hmd, struct os_hid_device *hid_hmd)
 	return ret;
 }
 
+static int
+rift_s_hmd_read_proximity_threshold(struct rift_s_hmd *hmd, struct os_hid_device *hid_hmd)
+{
+	char *json = NULL;
+	int json_len = 0;
+
+	int ret = rift_s_read_firmware_block(hid_hmd, RIFT_S_FIRMWARE_BLOCK_THRESHOLD, &json, &json_len);
+	if (ret < 0)
+		return ret;
+
+	ret = rift_s_parse_proximity_threshold(json, &hmd->proximity_threshold);
+	free(json);
+
+	return ret;
+}
+
 static void
 rift_s_hmd_destroy(struct xrt_device *xdev)
 {
@@ -275,7 +291,12 @@ rift_s_hmd_create(struct rift_s_system *sys)
 		goto cleanup;
 
 	/* Configure the proximity sensor threshold */
-	if (rift_s_protocol_set_proximity_threshold(hid_hmd, 0x1a3) < 0)
+	if (rift_s_hmd_read_proximity_threshold(hmd, hid_hmd) < 0)
+		goto cleanup;
+
+	RIFT_S_DEBUG("Configuring firmware provided proximity sensor threshold %u", hmd->proximity_threshold);
+
+	if (rift_s_protocol_set_proximity_threshold(hid_hmd, (uint16_t)hmd->proximity_threshold) < 0)
 		goto cleanup;
 
 #if 0

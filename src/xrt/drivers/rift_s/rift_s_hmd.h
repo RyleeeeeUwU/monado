@@ -51,6 +51,7 @@ struct rift_s_hmd
 	rift_s_panel_info_t panel_info;
 	rift_s_imu_config_t imu_config;
 	rift_s_imu_calibration imu_calibration;
+	int proximity_threshold;
 
 	/* Temporary distortion values for mesh calc */
 	struct u_panotools_values distortion_vals[2];

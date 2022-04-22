@@ -32,6 +32,28 @@
 #define JSON_MATRIX_4x4_ARRAY(a, b, c) u_json_get_float_array(u_json_get(a, b), c.v, 16)
 
 int
+rift_s_parse_proximity_threshold(char *json_string, int *proximity_threshold)
+{
+	cJSON *json_root = cJSON_Parse(json_string);
+	if (!cJSON_IsObject(json_root)) {
+		RIFT_S_ERROR("Could not parse JSON IMU calibration data.");
+		cJSON_Delete(json_root);
+		return -1;
+	}
+
+	if (!JSON_INT(json_root, "threshold", proximity_threshold))
+		goto fail;
+
+	cJSON_Delete(json_root);
+	return 0;
+
+fail:
+	RIFT_S_WARN("Unrecognised Rift S Proximity Threshold JSON data.\n%s", json_string);
+	cJSON_Delete(json_root);
+	return -1;
+}
+
+int
 rift_s_parse_imu_calibration(char *json_string, rift_s_imu_calibration *c)
 {
 	const cJSON *obj, *version, *imu;

@@ -100,6 +100,8 @@ typedef struct
 } rift_s_controller_imu_calibration;
 
 int
+rift_s_parse_proximity_threshold(char *json, int *proximity_threshold);
+int
 rift_s_parse_imu_calibration(char *json, rift_s_imu_calibration *c);
 int
 rift_s_controller_parse_imu_calibration(char *json, rift_s_controller_imu_calibration *c);
