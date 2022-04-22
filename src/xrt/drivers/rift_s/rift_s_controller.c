@@ -457,6 +457,12 @@ rift_s_controller_update_inputs(struct xrt_device *xdev)
 }
 
 static void
+rift_s_controller_set_output(struct xrt_device *xdev, enum xrt_output_name name, union xrt_output_value *value)
+{
+	/* TODO: Implement haptic sending */
+}
+
+static void
 rift_s_controller_get_tracked_pose(struct xrt_device *xdev,
                                    enum xrt_input_name name,
                                    uint64_t at_timestamp_ns,
@@ -528,6 +534,7 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	os_mutex_init(&ctrl->mutex);
 
 	ctrl->base.update_inputs = rift_s_controller_update_inputs;
+	ctrl->base.set_output = rift_s_controller_set_output;
 	ctrl->base.get_tracked_pose = rift_s_controller_get_tracked_pose;
 	ctrl->base.get_view_poses = rift_s_controller_get_view_poses;
 	ctrl->base.destroy = rift_s_controller_destroy;
