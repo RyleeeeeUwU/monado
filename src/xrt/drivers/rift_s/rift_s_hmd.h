@@ -60,5 +60,7 @@ struct rift_s_hmd *
 rift_s_hmd_create(struct rift_s_system *sys);
 void
 rift_s_hmd_handle_report(struct rift_s_hmd *hmd, timepoint_ns local_ts, rift_s_hmd_report_t *report);
+void
+rift_s_hmd_set_proximity(struct rift_s_hmd *hmd, bool prox_sensor);
 
 #endif

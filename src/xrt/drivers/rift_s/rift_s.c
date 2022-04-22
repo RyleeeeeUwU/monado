@@ -386,12 +386,11 @@ handle_packets(struct rift_s_system *sys)
 				handle_controller_report(sys, now, buf, size);
 			else if (buf[0] == 0x66) {
 				/* System state packet. Enable the screen if the prox sensor is
-				 * triggered. FIXME: Move to the HMD */
+				 * triggered. */
 				bool prox_sensor = (buf[1] == 0) ? false : true;
-				if (prox_sensor != sys->hmd->display_on) {
-					rift_s_set_screen_enable(sys->handles[HMD_HID], prox_sensor);
-					sys->hmd->display_on = prox_sensor;
-				}
+				os_mutex_lock(&sys->dev_mutex);
+				rift_s_hmd_set_proximity(sys->hmd, prox_sensor);
+				os_mutex_unlock(&sys->dev_mutex);
 			} else {
 				RIFT_S_WARN("Unknown Rift S report 0x%02x!", buf[0]);
 			}

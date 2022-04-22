@@ -374,3 +374,15 @@ cleanup:
 	rift_s_system_reference(&hmd->sys, NULL);
 	return NULL;
 }
+
+void
+rift_s_hmd_set_proximity(struct rift_s_hmd *hmd, bool prox_sensor)
+{
+	/* Enable the screen if the prox sensor is triggered, or turn it off otherwise. */
+	if (prox_sensor != hmd->display_on) {
+		struct os_hid_device *hid_hmd = rift_s_system_hid_handle(hmd->sys);
+
+		rift_s_set_screen_enable(hid_hmd, prox_sensor);
+		hmd->display_on = prox_sensor;
+	}
+}
