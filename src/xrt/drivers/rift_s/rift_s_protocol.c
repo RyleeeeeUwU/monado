@@ -448,19 +448,23 @@ rift_s_read_imu_config(struct os_hid_device *hid, rift_s_imu_config_t *imu_confi
 }
 
 int
+rift_s_protocol_set_proximity_threshold(struct os_hid_device *hid, uint16_t threshold)
+{
+	uint8_t buf[3];
+
+	/* Proximity sensor threshold 0x07 */
+	buf[0] = 0x07;
+	buf[1] = threshold & 0xff;
+	buf[2] = (threshold >> 8) & 0xff;
+
+	return os_hid_set_feature(hid, buf, 3);
+}
+
+int
 rift_s_hmd_enable(struct os_hid_device *hid, bool enable)
 {
 	uint8_t buf[3];
 	int res;
-
-	if (enable) {
-		/* Proximity sensor threshold 0x07 */
-		buf[0] = 0x07;
-		buf[1] = 0xa3;
-		buf[2] = 0x01;
-		if ((res = os_hid_set_feature(hid, buf, 3)) < 0)
-			return res;
-	}
 
 	/* Enable device */
 	buf[0] = 0x14;

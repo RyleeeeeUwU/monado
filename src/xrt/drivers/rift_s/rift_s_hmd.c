@@ -274,6 +274,10 @@ rift_s_hmd_create(struct rift_s_system *sys)
 	if (read_hmd_calibration(hmd, hid_hmd) < 0)
 		goto cleanup;
 
+	/* Configure the proximity sensor threshold */
+	if (rift_s_protocol_set_proximity_threshold(hid_hmd, 0x1a3) < 0)
+		goto cleanup;
+
 #if 0
 	dump_fw_block(hid_hmd, 0xB);
 	dump_fw_block(hid_hmd, 0xD);

@@ -243,6 +243,8 @@ rift_s_read_panel_info(struct os_hid_device *hid, rift_s_panel_info_t *panel_inf
 int
 rift_s_read_imu_config(struct os_hid_device *hid, rift_s_imu_config_t *imu_config);
 int
+rift_s_protocol_set_proximity_threshold(struct os_hid_device *hid, uint16_t threshold);
+int
 rift_s_hmd_enable(struct os_hid_device *hid, bool enable);
 int
 rift_s_set_screen_enable(struct os_hid_device *hid, bool enable);
