@@ -195,9 +195,9 @@ rift_s_controller_parse_imu_calibration(char *json_string, rift_s_controller_imu
 	i = 0;
 	cJSON_ArrayForEach(item, leds)
 	{
-		i++;
 		if (!json_read_led_point(leds, c->leds + i, i))
 			goto fail;
+		i++;
 	}
 
 	/* LED lensing models */
