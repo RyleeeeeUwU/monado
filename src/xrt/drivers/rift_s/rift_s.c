@@ -6,10 +6,14 @@
  * SPDX-License-Identifier: BSL-1.0
  *
  */
+
 /*!
  * @file
  * @brief  Oculus Rift S headset tracking system
  *
+ * The Rift S system provides the HID/USB polling thread
+ * and dispatches incoming packets to the HMD and controller
+ * implementations.
  *
  * Ported from OpenHMD
  *

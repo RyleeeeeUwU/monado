@@ -4,6 +4,16 @@
  *
  * OpenHMD - Free and Open Source API and drivers for immersive technology.
  */
+/*!
+ * @file
+ * @brief  Oculus Rift S firmware parsing
+ *
+ * Functions for parsing JSON configuration from the HMD
+ * and Touch Controller firmware.
+ *
+ * @author Jan Schmidt <jan@centricular.com>
+ * @ingroup drv_rift_s
+ */
 
 /* Oculus Rift S Driver - firmware JSON parsing functions */
 #include <string.h>

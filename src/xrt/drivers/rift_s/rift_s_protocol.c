@@ -9,7 +9,17 @@
  * OpenHMD - Free and Open Source API and drivers for immersive technology.
  */
 
-/* Oculus Rift S Driver - HID/USB Driver Implementation */
+/*!
+ * @file
+ * @brief  Oculus Rift S USB protocol implementation
+ *
+ * Functions for interpreting the USB protocol to the
+ * headset and Touch Controllers (via the headset's radio link)
+ *
+ * Ported from OpenHMD
+ *
+ * @author Jan Schmidt <jan@centricular.com>
+ */
 
 #include <assert.h>
 #include <stdio.h>

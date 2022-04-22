@@ -4,6 +4,14 @@
  *
  * OpenHMD - Free and Open Source API and drivers for immersive technology.
  */
+
+/*!
+ * @file
+ * @brief  Oculus Rift S Touch Controller interface
+ * @author Jan Schmidt <jan@centricular.com>
+ * @ingroup drv_rift_s
+ */
+
 #ifndef RIFT_S_CONTROLLER_H
 #define RIFT_S_CONTROLLER_H
 

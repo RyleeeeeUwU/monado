@@ -8,6 +8,18 @@
  * the need to be serialised and coordinated to work properly.
  *
  */
+/*!
+ * @file
+ * @brief  Oculus Rift S HMD Radio management interface
+ *
+ * Functions for serialising requests to communicate with
+ * Touch controllers over the HMDs wireless radio link,
+ * collecting responses and delivering them back via callbacks.
+ *
+ * Ported from OpenHMD
+ *
+ * @author Jan Schmidt <jan@centricular.com>
+ */
 
 #pragma once
 

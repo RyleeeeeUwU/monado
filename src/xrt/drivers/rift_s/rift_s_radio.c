@@ -4,6 +4,18 @@
  *
  * OpenHMD - Free and Open Source API and drivers for immersive technology.
  */
+/*!
+ * @file
+ * @brief  Oculus Rift S HMD Radio management
+ *
+ * Functions for serialising requests to communicate with
+ * Touch controllers over the HMDs wireless radio link,
+ * collecting responses and delivering them back via callbacks.
+ *
+ * Ported from OpenHMD
+ *
+ * @author Jan Schmidt <jan@centricular.com>
+ */
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

@@ -5,6 +5,18 @@
  *
  * OpenHMD - Free and Open Source API and drivers for immersive technology.
  */
+
+/*!
+ * @file
+ * @brief  Oculus Rift S USB protocol implementation interface.
+ *
+ * Functions for interpreting the USB protocol to the
+ * headset and Touch Controllers (via the headset's radio link)
+ *
+ * Ported from OpenHMD
+ *
+ * @author Jan Schmidt <jan@centricular.com>
+ */
 #ifndef __RIFT_S_PROTOCOL__
 #define __RIFT_S_PROTOCOL__
 

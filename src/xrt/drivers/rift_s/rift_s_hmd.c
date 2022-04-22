@@ -10,6 +10,8 @@
  * @file
  * @brief  Driver code for Oculus Rift S headsets
  *
+ * Implementation for the HMD communication, calibration and
+ * IMU integration.
  *
  * Ported from OpenHMD
  *
