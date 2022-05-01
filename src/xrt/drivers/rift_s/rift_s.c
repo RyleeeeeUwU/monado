@@ -352,10 +352,11 @@ handle_controller_report(struct rift_s_system *sys, timepoint_ns local_ts, const
 	os_mutex_unlock(&sys->dev_mutex);
 }
 
-static void
+static bool
 handle_packets(struct rift_s_system *sys)
 {
 	unsigned char buf[FEATURE_BUFFER_SIZE];
+	bool ret = true;
 
 	// Handle keep alive messages
 	timepoint_ns now = os_monotonic_get_ns();
@@ -372,10 +373,11 @@ handle_packets(struct rift_s_system *sys)
 		if (sys->handles[i] == NULL)
 			continue;
 
-		while (true) {
+		while (ret) {
 			int size = os_hid_read(sys->handles[i], buf, FEATURE_BUFFER_SIZE, 0);
 			if (size < 0) {
 				RIFT_S_ERROR("error reading from HMD device");
+				ret = false;
 				break;
 			} else if (size == 0) {
 				break; // No more messages, return.
@@ -392,7 +394,9 @@ handle_packets(struct rift_s_system *sys)
 				 * triggered. */
 				bool prox_sensor = (buf[1] == 0) ? false : true;
 				os_mutex_lock(&sys->dev_mutex);
-				rift_s_hmd_set_proximity(sys->hmd, prox_sensor);
+				if (sys->hmd != NULL) {
+					rift_s_hmd_set_proximity(sys->hmd, prox_sensor);
+				}
 				os_mutex_unlock(&sys->dev_mutex);
 			} else {
 				RIFT_S_WARN("Unknown Rift S report 0x%02x!", buf[0]);
@@ -400,7 +404,7 @@ handle_packets(struct rift_s_system *sys)
 		}
 	}
 
-	rift_s_radio_update(&sys->radio_state, sys->handles[HMD_HID]);
+	return ret;
 }
 
 
@@ -413,9 +417,19 @@ rift_s_run_thread(void *ptr)
 
 	os_thread_helper_lock(&sys->oth);
 	while (os_thread_helper_is_running_locked(&sys->oth)) {
-		// os_thread_helper_unlock(&sys->oth);
-		handle_packets(sys);
-		// os_thread_helper_lock(&sys->oth);
+		os_thread_helper_unlock(&sys->oth);
+
+		bool success = handle_packets(sys);
+
+		if (success) {
+			rift_s_radio_update(&sys->radio_state, sys->handles[HMD_HID]);
+		}
+
+		os_thread_helper_lock(&sys->oth);
+
+		if (!success) {
+			break;
+		}
 
 		if (os_thread_helper_is_running_locked(&sys->oth)) {
 			os_nanosleep(U_TIME_1MS_IN_NS);
