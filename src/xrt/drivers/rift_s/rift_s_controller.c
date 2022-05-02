@@ -412,7 +412,7 @@ ctrl_json_cb(bool success, uint8_t *response_bytes, int response_bytes_len, stru
 }
 
 static void
-rift_s_update_input_click(struct rift_s_controller *ctrl, int index, int64_t when_ns, int val)
+rift_s_update_input_bool(struct rift_s_controller *ctrl, int index, int64_t when_ns, int val)
 {
 	ctrl->base.inputs[index].timestamp = when_ns;
 	ctrl->base.inputs[index].value.boolean = (val != 0);
@@ -443,34 +443,57 @@ rift_s_controller_update_inputs(struct xrt_device *xdev)
 	uint64_t last_ns = ctrl->last_controls_local_time_ns;
 
 	if (ctrl->device_type == RIFT_S_DEVICE_LEFT_CONTROLLER) {
-		rift_s_update_input_click(ctrl, OCULUS_TOUCH_X_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_A_X);
-		rift_s_update_input_click(ctrl, OCULUS_TOUCH_Y_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_B_Y);
-		rift_s_update_input_click(ctrl, OCULUS_TOUCH_MENU_CLICK, last_ns,
-		                          ctrl->buttons & RIFT_S_BUTTON_MENU_OCULUS);
+		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_X_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_A_X);
+		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_Y_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_B_Y);
+		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_MENU_CLICK, last_ns,
+		                         ctrl->buttons & RIFT_S_BUTTON_MENU_OCULUS);
+		rift_s_update_input_bool(
+		    ctrl, OCULUS_TOUCH_X_TOUCH, last_ns,
+		    !!((ctrl->fingers & RIFT_S_FINGER_A_X_STRONG) ||
+		       ((ctrl->fingers & RIFT_S_FINGER_A_X_WEAK) &&
+		        !(ctrl->fingers & ~(RIFT_S_FINGER_B_Y_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
+		rift_s_update_input_bool(
+		    ctrl, OCULUS_TOUCH_Y_TOUCH, last_ns,
+		    !!((ctrl->fingers & RIFT_S_FINGER_B_Y_STRONG) ||
+		       ((ctrl->fingers & RIFT_S_FINGER_B_Y_WEAK) &&
+		        !(ctrl->fingers & ~(RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
 	} else {
-		rift_s_update_input_click(ctrl, OCULUS_TOUCH_A_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_A_X);
-		rift_s_update_input_click(ctrl, OCULUS_TOUCH_B_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_B_Y);
-		rift_s_update_input_click(ctrl, OCULUS_TOUCH_SYSTEM_CLICK, last_ns,
-		                          ctrl->buttons & RIFT_S_BUTTON_MENU_OCULUS);
+		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_A_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_A_X);
+		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_B_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_B_Y);
+		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_SYSTEM_CLICK, last_ns,
+		                         ctrl->buttons & RIFT_S_BUTTON_MENU_OCULUS);
+		rift_s_update_input_bool(
+		    ctrl, OCULUS_TOUCH_A_TOUCH, last_ns,
+		    !!((ctrl->fingers & RIFT_S_FINGER_A_X_STRONG) ||
+		       ((ctrl->fingers & RIFT_S_FINGER_A_X_WEAK) &&
+		        !(ctrl->fingers & ~(RIFT_S_FINGER_B_Y_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
+		rift_s_update_input_bool(
+		    ctrl, OCULUS_TOUCH_B_TOUCH, last_ns,
+		    !!((ctrl->fingers & RIFT_S_FINGER_B_Y_STRONG) ||
+		       ((ctrl->fingers & RIFT_S_FINGER_B_Y_WEAK) &&
+		        !(ctrl->fingers & ~(RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
 	}
 
 	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_SQUEEZE_VALUE, last_ns, 1.0 - (float)(ctrl->grip) / 4096.0);
 	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_TRIGGER_VALUE, last_ns, 1.0 - (float)(ctrl->trigger) / 4096.0);
 
-	rift_s_update_input_click(ctrl, OCULUS_TOUCH_THUMBSTICK_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_STICK);
+	rift_s_update_input_bool(ctrl, OCULUS_TOUCH_TRIGGER_TOUCH, last_ns,
+	                         !!(ctrl->fingers & (RIFT_S_FINGER_TRIGGER_WEAK | RIFT_S_FINGER_TRIGGER_STRONG)));
+
+	rift_s_update_input_bool(ctrl, OCULUS_TOUCH_THUMBSTICK_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_STICK);
+
+	rift_s_update_input_bool(ctrl, OCULUS_TOUCH_THUMBSTICK_TOUCH, last_ns,
+	                         !!((ctrl->fingers & RIFT_S_FINGER_STICK_STRONG) ||
+	                            ((ctrl->fingers & RIFT_S_FINGER_STICK_WEAK) &&
+	                             !(ctrl->fingers & ~(RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_B_Y_STRONG)))));
+
 	rift_s_update_input_vec2(ctrl, OCULUS_TOUCH_THUMBSTICK, last_ns,
 	                         (float)(ctrl->joystick_x) / 32768.0, /* FIXME: Scale this properly */
 	                         (float)(ctrl->joystick_y) / 32768.0  /* FIXME: Scale this properly */
 	);
 
 	/* FIXME: Output touch detections:
-	      OCULUS_TOUCH_X_TOUCH,
-	      OCULUS_TOUCH_Y_TOUCH,
-	      OCULUS_TOUCH_A_TOUCH,
-	      OCULUS_TOUCH_B_TOUCH,
-	      OCULUS_TOUCH_TRIGGER_TOUCH,
-	      OCULUS_TOUCH_THUMBSTICK_TOUCH,
-	      OCULUS_TOUCH_THUMBREST_TOUCH,
+	      OCULUS_TOUCH_THUMBREST_TOUCH, - does Rift S have a thumbrest?
 	*/
 
 	os_mutex_unlock(&ctrl->mutex);
