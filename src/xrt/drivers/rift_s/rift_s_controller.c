@@ -161,8 +161,18 @@ handle_imu_update(struct rift_s_controller *ctrl,
 {
 	/* Logic to update 64-bit ns timestamp from
 	 * 32-bit µS device timestamp that wraps every 71.5 minutes */
+	uint32_t dt = 0;
+
 	if (ctrl->imu_time_valid) {
-		uint32_t dt = imu_timestamp - ctrl->imu_timestamp32;
+		dt = imu_timestamp - ctrl->imu_timestamp32;
+
+		/* Sometimes we see 1-2 repeated IMU updates from a controller,
+		 * that must be ignored or else time jumps wildly */
+		if (dt == 0 || dt > 2147483648) {
+			RIFT_S_TRACE("Controller %" PRIx64 " - ignoring repeated IMU update", ctrl->device_id);
+			return;
+		}
+
 		ctrl->last_imu_device_time_ns += (timepoint_ns)dt * OS_NS_PER_USEC;
 	} else {
 		ctrl->last_imu_device_time_ns = (timepoint_ns)imu_timestamp * OS_NS_PER_USEC;
@@ -198,12 +208,11 @@ handle_imu_update(struct rift_s_controller *ctrl,
 	ctrl->pose.orientation = ctrl->fusion.rot;
 
 #if 0
-	printf ("dt = %f raw accel %d %d %d gyro %d %d %d -> accel %f %f %f  gyro %f %f %f\n",
-			dt_sec,
-			raw_accel[0], raw_accel[1], raw_accel[2],
-			raw_gyro[0], raw_gyro[1], raw_gyro[2],
-			ctrl->accel.x, ctrl->accel.y, ctrl->accel.z,
-			ctrl->gyro.x, ctrl->gyro.y, ctrl->gyro.z);
+	RIFT_S_DEBUG("%" PRIx64 " dt %u device time %u ns %" PRIu64
+	             " raw accel %d %d %d gyro %d %d %d -> accel %f %f %f  gyro %f %f %f\n",
+	             ctrl->device_id, dt, imu_timestamp, ctrl->last_imu_device_time_ns, raw_accel[0], raw_accel[1],
+	             raw_accel[2], raw_gyro[0], raw_gyro[1], raw_gyro[2], ctrl->accel.x, ctrl->accel.y, ctrl->accel.z,
+	             ctrl->gyro.x, ctrl->gyro.y, ctrl->gyro.z);
 #endif
 }
 
