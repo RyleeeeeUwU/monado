@@ -126,6 +126,7 @@ rift_s_hmd_handle_report(struct rift_s_hmd *hmd, timepoint_ns local_ts, rift_s_h
 		/* Apply correction offsets first, then rectify */
 		accel = m_vec3_sub(accel, hmd->imu_calibration.accel.offset_at_0C);
 		gyro = m_vec3_sub(gyro, hmd->imu_calibration.gyro.offset);
+
 		math_matrix_3x3_transform_vec3(&hmd->imu_calibration.accel.rectification, &accel, &hmd->raw_accel);
 		math_matrix_3x3_transform_vec3(&hmd->imu_calibration.gyro.rectification, &gyro, &hmd->raw_gyro);
 
@@ -216,6 +217,8 @@ rift_s_hmd_destroy(struct xrt_device *xdev)
 
 	/* Drop the reference to the system */
 	rift_s_system_reference(&hmd->sys, NULL);
+
+	u_var_remove_root(hmd);
 
 	m_imu_3dof_close(&hmd->fusion);
 
@@ -388,7 +391,14 @@ rift_s_hmd_create(struct rift_s_system *sys, const unsigned char *hmd_serial_no)
 
 	// Setup variable tracker: Optional but useful for debugging
 	u_var_add_root(hmd, "Oculus Rift S", true);
+
+	u_var_add_gui_header(hmd, NULL, "Tracking");
 	u_var_add_pose(hmd, &hmd->pose, "pose");
+
+	u_var_add_gui_header(hmd, NULL, "3DoF Tracking");
+	m_imu_3dof_add_vars(&hmd->fusion, hmd, "");
+
+	u_var_add_gui_header(hmd, NULL, "Misc");
 	u_var_add_log_level(hmd, &rift_s_log_level, "log_level");
 
 	RIFT_S_DEBUG("Oculus Rift S HMD serial %s initialised.", hmd_serial_no);
