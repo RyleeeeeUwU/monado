@@ -29,6 +29,7 @@
 
 #include "util/u_device.h"
 #include "util/u_trace_marker.h"
+#include "util/u_var.h"
 
 #include "rift_s.h"
 #include "rift_s_hmd.h"
@@ -92,6 +93,13 @@ enum touch_controller_input_index
 	INPUT_INDICES_LAST
 };
 #define SET_TOUCH_INPUT(d, NAME) ((d)->base.inputs[OCULUS_TOUCH_##NAME].name = XRT_INPUT_TOUCH_##NAME)
+#define DEBUG_TOUCH_INPUT_BOOL(d, NAME, label)                                                                         \
+	u_var_add_bool((d), &(d)->base.inputs[OCULUS_TOUCH_##NAME].value.boolean, label)
+#define DEBUG_TOUCH_INPUT_F32(d, NAME, label)                                                                          \
+	u_var_add_f32((d), &(d)->base.inputs[OCULUS_TOUCH_##NAME].value.vec1.x, label)
+#define DEBUG_TOUCH_INPUT_VEC2(d, NAME, label1, label2)                                                                \
+	u_var_add_f32((d), &(d)->base.inputs[OCULUS_TOUCH_##NAME].value.vec2.x, label1);                               \
+	u_var_add_f32((d), &(d)->base.inputs[OCULUS_TOUCH_##NAME].value.vec2.y, label2)
 
 #if DUMP_CONTROLLER_STATE
 static void
@@ -421,8 +429,8 @@ static void
 rift_s_update_input_vec2(struct rift_s_controller *ctrl, int index, int64_t when_ns, float x, float y)
 {
 	ctrl->base.inputs[index].timestamp = when_ns;
-	ctrl->base.inputs[index].value.vec1.x = x;
-	ctrl->base.inputs[index].value.vec1.x = y;
+	ctrl->base.inputs[index].value.vec2.x = x;
+	ctrl->base.inputs[index].value.vec2.y = y;
 }
 
 static void
@@ -488,7 +496,7 @@ rift_s_controller_get_tracked_pose(struct xrt_device *xdev,
 	}
 
 	os_mutex_lock(&ctrl->mutex);
-	// Estimate pose at timestamp at_timestamp_ns!
+	// TODO: Estimate pose at timestamp at_timestamp_ns
 	math_quat_normalize(&ctrl->pose.orientation);
 	out_relation->pose = ctrl->pose;
 	out_relation->relation_flags = (enum xrt_space_relation_flags)(XRT_SPACE_RELATION_ORIENTATION_VALID_BIT |
@@ -520,6 +528,8 @@ rift_s_controller_destroy(struct xrt_device *xdev)
 
 	/* Release the HMD reference */
 	rift_s_system_reference(&ctrl->sys, NULL);
+
+	u_var_remove_root(ctrl);
 
 	m_imu_3dof_close(&ctrl->fusion);
 
@@ -562,18 +572,19 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	ctrl->pose.orientation.w = 1.0f; // All other values set to zero by U_DEVICE_ALLOCATE (which calls U_CALLOC)
 	m_imu_3dof_init(&ctrl->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 
-	// Print name. FIXME: Set name to left/right. Set correct serial ID
-	snprintf(ctrl->base.str, XRT_DEVICE_NAME_LEN, "Oculus Rift S Touch Controller");
+	// Print name. FIXME: Set correct serial ID
 	snprintf(ctrl->base.serial, XRT_DEVICE_NAME_LEN, "FIXME S/N");
 
 	// Setup inputs and outputs
 	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
+		snprintf(ctrl->base.str, XRT_DEVICE_NAME_LEN, "Oculus Rift S Left Touch Controller");
 		SET_TOUCH_INPUT(ctrl, X_CLICK);
 		SET_TOUCH_INPUT(ctrl, X_TOUCH);
 		SET_TOUCH_INPUT(ctrl, Y_CLICK);
 		SET_TOUCH_INPUT(ctrl, Y_TOUCH);
 		SET_TOUCH_INPUT(ctrl, MENU_CLICK);
 	} else {
+		snprintf(ctrl->base.str, XRT_DEVICE_NAME_LEN, "Oculus Rift S Right Touch Controller");
 		SET_TOUCH_INPUT(ctrl, A_CLICK);
 		SET_TOUCH_INPUT(ctrl, A_TOUCH);
 		SET_TOUCH_INPUT(ctrl, B_CLICK);
@@ -595,6 +606,38 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 
 	ctrl->base.binding_profiles = binding_profiles_rift_s;
 	ctrl->base.binding_profile_count = ARRAY_SIZE(binding_profiles_rift_s);
+
+	u_var_add_root(ctrl, ctrl->base.str, true);
+	u_var_add_gui_header(ctrl, NULL, "Tracking");
+	u_var_add_pose(ctrl, &ctrl->pose, "Tracked Pose");
+
+	u_var_add_gui_header(ctrl, NULL, "3DoF Tracking");
+	m_imu_3dof_add_vars(&ctrl->fusion, ctrl, "");
+
+	u_var_add_gui_header(ctrl, NULL, "Controls");
+	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, X_CLICK, "X button");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, X_TOUCH, "X button touch");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, Y_CLICK, "Y button");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, Y_TOUCH, "Y button touch");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, MENU_CLICK, "Menu button");
+	} else {
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, A_CLICK, "A button");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, A_TOUCH, "A button touch");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, B_CLICK, "B button");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, B_TOUCH, "B button touch");
+		DEBUG_TOUCH_INPUT_BOOL(ctrl, SYSTEM_CLICK, "Oculus button");
+	}
+
+	DEBUG_TOUCH_INPUT_F32(ctrl, SQUEEZE_VALUE, "Grip value");
+
+	DEBUG_TOUCH_INPUT_BOOL(ctrl, TRIGGER_TOUCH, "Trigger touch");
+	DEBUG_TOUCH_INPUT_F32(ctrl, TRIGGER_VALUE, "Trigger");
+	DEBUG_TOUCH_INPUT_BOOL(ctrl, THUMBSTICK_CLICK, "Thumbstick click");
+	DEBUG_TOUCH_INPUT_BOOL(ctrl, THUMBSTICK_TOUCH, "Thumbstick touch");
+	DEBUG_TOUCH_INPUT_VEC2(ctrl, THUMBSTICK, "Thumbstick X", "Thumbstick Y");
+	DEBUG_TOUCH_INPUT_BOOL(ctrl, THUMBREST_TOUCH, "Thumbrest touch");
+
 	return ctrl;
 }
 
@@ -605,6 +648,7 @@ rift_s_controller_update_configuration(struct rift_s_controller *ctrl, uint64_t 
 
 	if (ctrl->device_id != device_id) {
 		ctrl->device_id = device_id;
+		snprintf(ctrl->base.serial, XRT_DEVICE_NAME_LEN, "%016" PRIx64, device_id);
 		// If the device ID changed somehow, re-read the JSON blocks
 		ctrl->have_config = ctrl->have_calibration = false;
 	}
