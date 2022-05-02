@@ -65,8 +65,6 @@ rift_s_system_create(const unsigned char *hmd_serial_no,
 	sys->base.type = XRT_TRACKING_TYPE_NONE;
 	sys->base.offset.orientation.w = 1.0f;
 
-	u_var_add_root(sys, "Oculus Rift S", false);
-
 	/* Init refcount */
 	sys->ref.count = 1;
 
@@ -153,7 +151,6 @@ rift_s_system_free(struct rift_s_system *sys)
 
 	os_mutex_destroy(&sys->dev_mutex);
 
-	u_var_remove_root(sys);
 	free(sys);
 }
 
