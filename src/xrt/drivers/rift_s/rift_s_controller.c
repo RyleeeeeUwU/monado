@@ -455,7 +455,7 @@ rift_s_controller_update_inputs(struct xrt_device *xdev)
 	}
 
 	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_SQUEEZE_VALUE, last_ns, 1.0 - (float)(ctrl->grip) / 4096.0);
-	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_TRIGGER_VALUE, last_ns, 1.0 - (float)(ctrl->grip) / 4096.0);
+	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_TRIGGER_VALUE, last_ns, 1.0 - (float)(ctrl->trigger) / 4096.0);
 
 	rift_s_update_input_click(ctrl, OCULUS_TOUCH_THUMBSTICK_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_STICK);
 	rift_s_update_input_vec2(ctrl, OCULUS_TOUCH_THUMBSTICK, last_ns,
