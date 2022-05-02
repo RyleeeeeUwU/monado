@@ -248,8 +248,8 @@ rift_s_controller_parse_imu_calibration(char *json_string, rift_s_controller_imu
 
 	if (!JSON_MATRIX_3X3_ARRAY(json_root, "gyro_m", c->gyro.rectification) ||
 	    !JSON_VEC3(json_root, "gyro_b", &c->gyro.offset) ||
-	    !JSON_MATRIX_3X3_ARRAY(json_root, "acc_m", c->gyro.rectification) ||
-	    !JSON_VEC3(json_root, "acc_b", &c->gyro.offset)) {
+	    !JSON_MATRIX_3X3_ARRAY(json_root, "acc_m", c->accel.rectification) ||
+	    !JSON_VEC3(json_root, "acc_b", &c->accel.offset)) {
 		goto fail;
 	}
 
