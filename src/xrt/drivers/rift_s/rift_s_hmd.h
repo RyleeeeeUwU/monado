@@ -43,7 +43,7 @@ struct rift_s_hmd
 	struct xrt_pose pose;
 	struct xrt_vec3 raw_mag, raw_accel, raw_gyro;
 
-	/* Auxilliary state */
+	/* Auxiliary state */
 	float temperature;
 	bool display_on;
 
