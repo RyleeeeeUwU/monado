@@ -116,7 +116,7 @@ rift_s_system_create(const unsigned char *hmd_serial_no,
 	    "can be enumerated by the host system.");
 
 	// Two seconds seems to be needed for the display connection to stabilise
-	os_nanosleep(U_TIME_1MS_IN_NS * 2000);
+	os_nanosleep((uint64_t)U_TIME_1S_IN_NS * 2);
 
 	RIFT_S_DEBUG("Oculus Rift S driver ready");
 
