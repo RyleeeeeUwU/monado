@@ -335,7 +335,7 @@ rift_s_controller_handle_report(struct rift_s_controller *ctrl,
 			} else if (ctrl->log_bytes > 0) {
 				/* Found the end of the string */
 				ctrl->log[ctrl->log_bytes] = '\0';
-				printf("L	%s\n", ctrl->log);
+				rift_s_hexdump_buffer("Controller debug", ctrl->log, ctrl->log_bytes);
 				ctrl->log_bytes = 0;
 			}
 		}
