@@ -23,6 +23,7 @@
 #include <inttypes.h>
 
 #include "math/m_api.h"
+#include "math/m_space.h"
 #include "math/m_vec3.h"
 
 #include "os/os_hid.h"
@@ -515,6 +516,32 @@ rift_s_controller_set_output(struct xrt_device *xdev, enum xrt_output_name name,
 }
 
 static void
+rift_s_controller_get_fusion_pose(struct rift_s_controller *ctrl,
+                                  enum xrt_input_name name,
+                                  uint64_t at_timestamp_ns,
+                                  struct xrt_space_relation *out_relation)
+{
+	out_relation->pose = ctrl->pose;
+	out_relation->linear_velocity.x = 0.0f;
+	out_relation->linear_velocity.y = 0.0f;
+	out_relation->linear_velocity.z = 0.0f;
+
+	/*!
+	 * @todo This is hack, fusion reports angvel relative to the device bu
+
+	 * it needs to be in relation to the base space. Rotating it with the
+	 * device orientation is enough to get it into the right space, angula
+
+	 * velocity is a derivative so needs a special rotation.
+	 */
+	math_quat_rotate_derivative(&ctrl->pose.orientation, &ctrl->fusion.last.gyro, &out_relation->angular_velocity);
+
+	out_relation->relation_flags = (enum xrt_space_relation_flags)(
+	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
+	    XRT_SPACE_RELATION_ANGULAR_VELOCITY_VALID_BIT | XRT_SPACE_RELATION_LINEAR_VELOCITY_VALID_BIT);
+}
+
+static void
 rift_s_controller_get_tracked_pose(struct xrt_device *xdev,
                                    enum xrt_input_name name,
                                    uint64_t at_timestamp_ns,
@@ -527,14 +554,25 @@ rift_s_controller_get_tracked_pose(struct xrt_device *xdev,
 		return;
 	}
 
+	struct xrt_relation_chain xrc = {0};
+
+	struct xrt_pose pose_correction = {0};
+
+	/* Rotate the grip/aim pose up by 40 degrees around the X axis */
+	struct xrt_vec3 axis = {1.0, 0, 0};
+
+	math_quat_from_angle_vector(DEG_TO_RAD(40), &axis, &pose_correction.orientation);
+
+	m_relation_chain_push_pose(&xrc, &pose_correction);
+
+	/* Apply the fusion rotation */
+	struct xrt_space_relation *rel = m_relation_chain_reserve(&xrc);
+
 	os_mutex_lock(&ctrl->mutex);
-	// TODO: Estimate pose at timestamp at_timestamp_ns
-	math_quat_normalize(&ctrl->pose.orientation);
-	out_relation->pose = ctrl->pose;
-	out_relation->relation_flags = (enum xrt_space_relation_flags)(XRT_SPACE_RELATION_ORIENTATION_VALID_BIT |
-	                                                               XRT_SPACE_RELATION_POSITION_VALID_BIT |
-	                                                               XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT);
+	rift_s_controller_get_fusion_pose(ctrl, name, at_timestamp_ns, rel);
 	os_mutex_unlock(&ctrl->mutex);
+
+	m_relation_chain_resolve(&xrc, out_relation);
 }
 
 static void
