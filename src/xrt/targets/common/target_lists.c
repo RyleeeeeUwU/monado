@@ -104,6 +104,10 @@
  * Builders
  */
 xrt_builder_create_func_t target_builder_list[] = {
+#ifdef XRT_BUILD_DRIVER_RIFT_S
+    rift_s_builder_create,
+#endif
+
 #ifdef T_BUILDER_RGB_TRACKING
     t_builder_rgb_tracking_create,
 #endif // T_BUILDER_RGB_TRACKING
@@ -150,10 +154,6 @@ struct xrt_prober_entry target_entry_list[] = {
 #ifdef XRT_BUILD_DRIVER_HDK
     {HDK_VID, HDK_PID, hdk_found, "OSVR HDK", "osvr"},
 #endif // XRT_BUILD_DRIVER_HDK
-
-#ifdef XRT_BUILD_DRIVER_RIFT_S
-    {OCULUS_VR_INC_VID, OCULUS_RIFT_S_PID, rift_s_found, "Oculus Rift S", "rift_s"},
-#endif
 
 #ifdef XRT_BUILD_DRIVER_VIVE
     {HTC_VID, VIVE_PID, vive_found, "HTC Vive", "vive"},

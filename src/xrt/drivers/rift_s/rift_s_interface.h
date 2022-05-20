@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include "xrt/xrt_prober.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -26,18 +28,12 @@ extern "C" {
 #define OCULUS_RIFT_S_PID 0x0051
 
 /*!
- * Probing function for Oculus Rift S HMD.
+ * Builder setup for Oculus Rift S HMD.
  *
  * @ingroup drv_rift_s
- * @see xrt_prober_found_function_t
  */
-int
-rift_s_found(struct xrt_prober *xp,
-             struct xrt_prober_device **devices,
-             size_t device_count,
-             size_t index,
-             cJSON *attached_data,
-             struct xrt_device **out_xdev);
+struct xrt_builder *
+rift_s_builder_create(void);
 
 /*!
  * @dir drivers/rift_s
