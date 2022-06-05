@@ -642,12 +642,10 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	ctrl->pose.orientation.w = 1.0f; // All other values set to zero by U_DEVICE_ALLOCATE (which calls U_CALLOC)
 	m_imu_3dof_init(&ctrl->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 
-	// Print name. FIXME: Set correct serial ID
-	snprintf(ctrl->base.serial, XRT_DEVICE_NAME_LEN, "FIXME S/N");
-
 	// Setup inputs and outputs
 	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
 		snprintf(ctrl->base.str, XRT_DEVICE_NAME_LEN, "Oculus Rift S Left Touch Controller");
+		snprintf(ctrl->base.serial, XRT_DEVICE_NAME_LEN, "Left Controller");
 		SET_TOUCH_INPUT(ctrl, X_CLICK);
 		SET_TOUCH_INPUT(ctrl, X_TOUCH);
 		SET_TOUCH_INPUT(ctrl, Y_CLICK);
@@ -655,6 +653,7 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 		SET_TOUCH_INPUT(ctrl, MENU_CLICK);
 	} else {
 		snprintf(ctrl->base.str, XRT_DEVICE_NAME_LEN, "Oculus Rift S Right Touch Controller");
+		snprintf(ctrl->base.serial, XRT_DEVICE_NAME_LEN, "Right Controller");
 		SET_TOUCH_INPUT(ctrl, A_CLICK);
 		SET_TOUCH_INPUT(ctrl, A_TOUCH);
 		SET_TOUCH_INPUT(ctrl, B_CLICK);
