@@ -461,12 +461,12 @@ rift_s_controller_update_inputs(struct xrt_device *xdev)
 		    ctrl, OCULUS_TOUCH_X_TOUCH, last_ns,
 		    !!((ctrl->fingers & RIFT_S_FINGER_A_X_STRONG) ||
 		       ((ctrl->fingers & RIFT_S_FINGER_A_X_WEAK) &&
-		        !(ctrl->fingers & ~(RIFT_S_FINGER_B_Y_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
+		        !(ctrl->fingers & (RIFT_S_FINGER_B_Y_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
 		rift_s_update_input_bool(
 		    ctrl, OCULUS_TOUCH_Y_TOUCH, last_ns,
 		    !!((ctrl->fingers & RIFT_S_FINGER_B_Y_STRONG) ||
 		       ((ctrl->fingers & RIFT_S_FINGER_B_Y_WEAK) &&
-		        !(ctrl->fingers & ~(RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
+		        !(ctrl->fingers & (RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
 	} else {
 		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_A_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_A_X);
 		rift_s_update_input_bool(ctrl, OCULUS_TOUCH_B_CLICK, last_ns, ctrl->buttons & RIFT_S_BUTTON_B_Y);
@@ -476,12 +476,12 @@ rift_s_controller_update_inputs(struct xrt_device *xdev)
 		    ctrl, OCULUS_TOUCH_A_TOUCH, last_ns,
 		    !!((ctrl->fingers & RIFT_S_FINGER_A_X_STRONG) ||
 		       ((ctrl->fingers & RIFT_S_FINGER_A_X_WEAK) &&
-		        !(ctrl->fingers & ~(RIFT_S_FINGER_B_Y_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
+		        !(ctrl->fingers & (RIFT_S_FINGER_B_Y_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
 		rift_s_update_input_bool(
 		    ctrl, OCULUS_TOUCH_B_TOUCH, last_ns,
 		    !!((ctrl->fingers & RIFT_S_FINGER_B_Y_STRONG) ||
 		       ((ctrl->fingers & RIFT_S_FINGER_B_Y_WEAK) &&
-		        !(ctrl->fingers & ~(RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
+		        !(ctrl->fingers & (RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_STICK_STRONG)))));
 	}
 
 	rift_s_update_input_analog(ctrl, OCULUS_TOUCH_SQUEEZE_VALUE, last_ns, 1.0 - (float)(ctrl->grip) / 4096.0);
@@ -495,7 +495,7 @@ rift_s_controller_update_inputs(struct xrt_device *xdev)
 	rift_s_update_input_bool(ctrl, OCULUS_TOUCH_THUMBSTICK_TOUCH, last_ns,
 	                         !!((ctrl->fingers & RIFT_S_FINGER_STICK_STRONG) ||
 	                            ((ctrl->fingers & RIFT_S_FINGER_STICK_WEAK) &&
-	                             !(ctrl->fingers & ~(RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_B_Y_STRONG)))));
+	                             !(ctrl->fingers & (RIFT_S_FINGER_A_X_STRONG | RIFT_S_FINGER_B_Y_STRONG)))));
 
 	rift_s_update_input_vec2(ctrl, OCULUS_TOUCH_THUMBSTICK, last_ns,
 	                         (float)(ctrl->joystick_x) / 32768.0, /* FIXME: Scale this properly */
