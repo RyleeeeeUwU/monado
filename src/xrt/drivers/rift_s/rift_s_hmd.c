@@ -97,9 +97,9 @@ rift_s_hmd_handle_report(struct rift_s_hmd *hmd, timepoint_ns local_ts, rift_s_h
 		/* Avoid wrap-around on 32-bit device times */
 		dt = report->timestamp - hmd->last_imu_timestamp32;
 	} else {
-		hmd->last_imu_timestamp_ns = report->timestamp;
+		hmd->last_imu_timestamp_ns = (timepoint_ns)(report->timestamp) * OS_NS_PER_USEC;
+		hmd->last_imu_timestamp32 = report->timestamp;
 	}
-	hmd->last_imu_timestamp32 = report->timestamp;
 	hmd->last_imu_local_timestamp_ns = local_ts;
 
 	const float gyro_scale = 1.0 / hmd->imu_config.gyro_scale;
@@ -143,6 +143,7 @@ rift_s_hmd_handle_report(struct rift_s_hmd *hmd, timepoint_ns local_ts, rift_s_h
 		m_imu_3dof_update(&hmd->fusion, hmd->last_imu_timestamp_ns, &hmd->raw_accel, &hmd->raw_gyro);
 
 		hmd->last_imu_timestamp_ns += (uint64_t)dt * OS_NS_PER_USEC;
+		hmd->last_imu_timestamp32 += dt;
 		dt = TICK_LEN_US;
 	}
 
