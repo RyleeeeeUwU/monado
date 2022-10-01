@@ -93,6 +93,8 @@ struct wmr_bt_controller
 	struct m_imu_3dof fusion;
 	//! The last angular velocity from the IMU, for prediction.
 	struct xrt_vec3 last_angular_velocity;
+	//! Counter that increments for each sent cmd packet
+	uint8_t cmd_ctr;
 
 	/* Thread for direct Bluetooth connections,
 	 * not for tunneled */

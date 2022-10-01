@@ -127,6 +127,28 @@ read_packets(struct wmr_bt_controller *d)
 	return true;
 }
 
+static void
+wmr_controller_cmd_send(struct wmr_bt_controller *d, const uint8_t *data, size_t size)
+{
+	uint8_t out_buf[64] = {
+	    0,
+	};
+	struct os_hid_device *hid = d->controller_hid;
+
+	assert(size > 2);
+	assert(size <= sizeof(out_buf));
+
+	memcpy(out_buf, data, size);
+
+	if (out_buf[0] == 0x03 || out_buf[0] == 0x05) {
+		// Set (and increment) the outbound cmd counter
+		out_buf[1] = d->cmd_ctr++;
+	}
+
+	convert_cmd_prefix_send(d, out_buf, size);
+	os_hid_write(hid, out_buf, size);
+}
+
 /*
  *
  * Config functions.
@@ -613,6 +635,12 @@ wmr_controller_create_common(struct os_hid_device *controller_hid,
 	u_var_add_ro_vec3_f32(d, &d->input.imu.gyro, "imu.gyro");
 	u_var_add_i32(d, &d->input.imu.temperature, "imu.temperature");
 
+	/* Make sure the controller IMU is enabled */
+	wmr_controller_cmd_send(d, wmr_controller_imu_on_cmd, sizeof(wmr_controller_imu_on_cmd));
+
+	/* Make the LEDs turn on bright.
+	 * FIXME: Needs refreshing periodically */
+	wmr_controller_cmd_send(d, wmr_controller_leds_bright_cmd, sizeof(wmr_controller_leds_bright_cmd));
 	return d;
 }
 

@@ -113,6 +113,11 @@ struct wmr_controller_fw_cmd_response
 	};
 };
 
+static const unsigned char wmr_controller_imu_on_cmd[64] = {0x06, 0x03, 0x01, 0x00, 0x02};
+
+static const unsigned char wmr_controller_leds_bright_cmd[] = {0x03, 0x01, 0x21, 0x03, 0x00, 0x00,
+                                                               0x00, 0x00, 0x00, 0x00, 0x80, 0x2c};
+
 /*!
  * @}
  */
