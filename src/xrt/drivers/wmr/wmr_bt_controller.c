@@ -700,7 +700,18 @@ wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
 void
 wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d, uint64_t now_ns, unsigned char *buffer, int size)
 {
+	if (size < 45)
+		return; // Invalid packet
+
 	os_mutex_lock(&d->lock);
+
+	WMR_TRACE(d,
+	          "Got controller packet (%i)\n\t%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x | %02x %02x %02x "
+	          "%02x %02x %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
+	          size, buffer[0], buffer[1], buffer[2], buffer[3], buffer[4], buffer[5], buffer[6], buffer[7],
+	          buffer[8], buffer[9], buffer[10], buffer[11], buffer[12], buffer[13], buffer[14], buffer[15],
+	          buffer[16], buffer[17], buffer[18], buffer[19], buffer[20], buffer[21], buffer[22], buffer[23],
+	          buffer[24], buffer[25], buffer[26], buffer[27], buffer[28], buffer[29]);
 
 	// convert tunnelled packets
 	convert_cmd_prefix_recv(d, buffer, size);
