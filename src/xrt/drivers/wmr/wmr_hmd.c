@@ -155,7 +155,7 @@ hololens_sensors_decode_packet(struct wmr_hmd *wh,
 
 
 static void
-hololens_ensure_controller(struct wmr_hmd *wh, uint8_t controller_id)
+hololens_ensure_controller(struct wmr_hmd *wh, uint8_t controller_id, uint16_t vid, uint16_t pid)
 {
 	if (controller_id >= WMR_MAX_CONTROLLERS)
 		return;
@@ -169,7 +169,7 @@ hololens_ensure_controller(struct wmr_hmd *wh, uint8_t controller_id)
 	    controller_id == 0 ? XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER : XRT_DEVICE_TYPE_RIGHT_HAND_CONTROLLER;
 
 	wh->controller[controller_id] =
-	    wmr_controller_create_tunnelled(wh->hid_hololens_sensors_dev, controller_type, wh->log_level);
+	    wmr_controller_create_tunnelled(wh->hid_hololens_sensors_dev, controller_type, vid, pid, wh->log_level);
 }
 
 /*
@@ -247,7 +247,7 @@ hololens_handle_controller_status_packet(struct wmr_hmd *wh, const unsigned char
 			WMR_TRACE(wh, "Controller %d online. VID 0x%04x PID 0x%04x", controller_id, vid, pid);
 		}
 
-		hololens_ensure_controller(wh, controller_id);
+		hololens_ensure_controller(wh, controller_id, vid, pid);
 		break;
 	}
 	default: //

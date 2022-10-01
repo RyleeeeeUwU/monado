@@ -299,7 +299,8 @@ wmr_bt_controller_found(struct xrt_prober *xp,
 	}
 
 
-	struct xrt_device *p = wmr_bt_controller_create(hid_controller, controller_type, log_level);
+	struct xrt_device *p = wmr_bt_controller_create(hid_controller, controller_type, devices[index]->vendor_id,
+	                                                devices[index]->product_id, log_level);
 	if (!p) {
 		U_LOG_IFL_E(log_level, "Failed to create WMR controller (Bluetooth)");
 		return -1;

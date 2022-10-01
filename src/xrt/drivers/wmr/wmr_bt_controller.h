@@ -38,6 +38,7 @@ enum wmr_controller_input_id
 	WMR_CONTROLLER_INPUT_ID_TRIGGER_VALUE,
 	WMR_CONTROLLER_INPUT_ID_THUMBSTICK_CLICK,
 	WMR_CONTROLLER_INPUT_ID_THUMBSTICK,
+	WMR_CONTROLLER_INPUT_ID_CLIFFHOUSE_CLICK,
 
 	/* Original WMR controller specific */
 	WMR_CONTROLLER_INPUT_ID_TRACKPAD_CLICK,
@@ -102,15 +103,22 @@ struct wmr_bt_controller
 struct xrt_device *
 wmr_bt_controller_create(struct os_hid_device *controller_hid,
                          enum xrt_device_type controller_type,
+                         uint16_t vid,
+                         uint16_t pid,
                          enum u_logging_level log_level);
 
 struct wmr_bt_controller *
 wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
                                 enum xrt_device_type controller_type,
+                                uint16_t vid,
+                                uint16_t pid,
                                 enum u_logging_level log_level);
 
 void
-wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d, uint64_t now_ns, const unsigned char *buffer, int size);
+wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d,
+                                     uint64_t now_ns,
+                                     const unsigned char *buffer,
+                                     int size);
 
 #ifdef __cplusplus
 }

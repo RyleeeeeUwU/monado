@@ -82,9 +82,7 @@ read_packets(struct wmr_bt_controller *d)
 	WMR_TRACE(d, "WMR Controller (Bluetooth): Read %u bytes from device", size);
 
 	switch (buffer[0]) {
-	case WMR_BT_MOTION_CONTROLLER_MSG:
-		wmr_controller_handle_sensors_packet(d, now_ns, buffer, size);
-		break;
+	case WMR_BT_MOTION_CONTROLLER_MSG: wmr_controller_handle_sensors_packet(d, now_ns, buffer, size); break;
 	default: //
 		WMR_DEBUG(d, "WMR Controller: Unknown message type: %02x, size: %i", buffer[0], size);
 		break;
@@ -449,9 +447,25 @@ static struct wmr_bt_controller *
 wmr_controller_create_common(struct os_hid_device *controller_hid,
                              bool standalone_device,
                              enum xrt_device_type controller_type,
+                             uint16_t vid,
+                             uint16_t pid,
                              enum u_logging_level log_level)
 {
 	DRV_TRACE_MARKER();
+
+	enum wmr_controller_variant controller_variant = WMR_CONTROLLER_VARIANT_ORIGINAL;
+
+	if (vid != MICROSOFT_VID) {
+		U_LOG_E("WMR Controller has unrecognised vendor ID %04x", vid);
+		return NULL;
+	}
+
+	switch (pid) {
+	case WMR_CONTROLLER_PID:
+	case ODYSSEY_CONTROLLER_PID: controller_variant = WMR_CONTROLLER_VARIANT_ORIGINAL; break;
+	case REVERB_G2_CONTROLLER_PID: controller_variant = WMR_CONTROLLER_VARIANT_G2; break;
+	default: U_LOG_E("WMR Controller has unrecognised product ID %04x", pid); return NULL;
+	}
 
 	enum u_device_alloc_flags flags = U_DEVICE_ALLOC_TRACKING_NONE;
 	struct wmr_bt_controller *d =
@@ -472,7 +486,7 @@ wmr_controller_create_common(struct os_hid_device *controller_hid,
 	d->base.set_output = wmr_bt_controller_set_output;
 	d->base.update_inputs = wmr_bt_controller_update_inputs;
 
-	d->variant = WMR_CONTROLLER_VARIANT_ORIGINAL;
+	d->variant = controller_variant;
 
 	SET_INPUT(AIM_POSE);
 	SET_INPUT(GRIP_POSE);
@@ -486,10 +500,27 @@ wmr_controller_create_common(struct os_hid_device *controller_hid,
 	SET_INPUT(TRACKPAD_TOUCH);
 	SET_INPUT(TRACKPAD);
 
-	SET_INPUT_INACTIVE(A_CLICK);
-	SET_INPUT_INACTIVE(B_CLICK);
-	SET_INPUT_INACTIVE(X_CLICK);
-	SET_INPUT_INACTIVE(Y_CLICK);
+	SET_INPUT(A_CLICK);
+	SET_INPUT(B_CLICK);
+	SET_INPUT(X_CLICK);
+	SET_INPUT(Y_CLICK);
+
+	SET_INPUT(CLIFFHOUSE_CLICK);
+
+	switch (controller_variant) {
+	case WMR_CONTROLLER_VARIANT_ORIGINAL:
+		SET_INPUT_INACTIVE(A_CLICK);
+		SET_INPUT_INACTIVE(B_CLICK);
+		SET_INPUT_INACTIVE(X_CLICK);
+		SET_INPUT_INACTIVE(Y_CLICK);
+		break;
+	case WMR_CONTROLLER_VARIANT_G2:
+		SET_INPUT_INACTIVE(TRACKPAD_CLICK);
+		SET_INPUT_INACTIVE(TRACKPAD_TOUCH);
+		SET_INPUT_INACTIVE(TRACKPAD);
+		break;
+	default: break;
+	}
 
 	for (uint32_t i = 0; i < d->base.input_count; i++) {
 		d->base.inputs[0].active = true;
@@ -505,7 +536,6 @@ wmr_controller_create_common(struct os_hid_device *controller_hid,
 	d->base.orientation_tracking_supported = true;
 	d->base.position_tracking_supported = false;
 	d->base.hand_tracking_supported = true;
-
 
 	d->input.imu.timestamp_ticks = 0;
 	m_imu_3dof_init(&d->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
@@ -549,10 +579,13 @@ wmr_controller_create_common(struct os_hid_device *controller_hid,
 struct xrt_device *
 wmr_bt_controller_create(struct os_hid_device *controller_hid,
                          enum xrt_device_type controller_type,
+                         uint16_t vid,
+                         uint16_t pid,
                          enum u_logging_level log_level)
 {
 
-	struct wmr_bt_controller *d = wmr_controller_create_common(controller_hid, true, controller_type, log_level);
+	struct wmr_bt_controller *d =
+	    wmr_controller_create_common(controller_hid, true, controller_type, vid, pid, log_level);
 
 	if (d == NULL)
 		return NULL;
@@ -583,9 +616,12 @@ wmr_bt_controller_create(struct os_hid_device *controller_hid,
 struct wmr_bt_controller *
 wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
                                 enum xrt_device_type controller_type,
+                                uint16_t vid,
+                                uint16_t pid,
                                 enum u_logging_level log_level)
 {
-	struct wmr_bt_controller *d = wmr_controller_create_common(controller_hid, false, controller_type, log_level);
+	struct wmr_bt_controller *d =
+	    wmr_controller_create_common(controller_hid, false, controller_type, vid, pid, log_level);
 
 	if (d == NULL)
 		return NULL;
@@ -594,7 +630,10 @@ wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
 }
 
 void
-wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d, uint64_t now_ns, const unsigned char *buffer, int size)
+wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d,
+                                     uint64_t now_ns,
+                                     const unsigned char *buffer,
+                                     int size)
 {
 	os_mutex_lock(&d->lock);
 
