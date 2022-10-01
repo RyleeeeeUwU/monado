@@ -55,6 +55,42 @@ wmr_bt_controller(struct xrt_device *p)
 	return (struct wmr_bt_controller *)p;
 }
 
+static void
+convert_cmd_prefix_send(struct wmr_bt_controller *d, uint8_t *data, size_t size)
+{
+	enum xrt_device_type device_type = d->base.device_type;
+
+	/* Skip for directly connected controller */
+	if (d->standalone_device)
+		return;
+	if (size < 1)
+		return;
+
+	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
+		data[0] += 0x05;
+	} else {
+		data[0] += 0x0d;
+	}
+}
+
+static void
+convert_cmd_prefix_recv(struct wmr_bt_controller *d, uint8_t *data, size_t size)
+{
+	enum xrt_device_type device_type = d->base.device_type;
+
+	/* Skip for directly connected controller */
+	if (d->standalone_device)
+		return;
+	if (size < 1)
+		return;
+
+	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {
+		data[0] -= 0x05;
+	} else {
+		data[0] -= 0x0d;
+	}
+}
+
 static bool
 read_packets(struct wmr_bt_controller *d)
 {
@@ -99,7 +135,7 @@ read_packets(struct wmr_bt_controller *d)
 
 static int
 wmr_controller_send_fw_cmd(struct wmr_bt_controller *d,
-                           const struct wmr_controller_fw_cmd *fw_cmd,
+                           struct wmr_controller_fw_cmd *fw_cmd,
                            unsigned char response_code,
                            struct wmr_controller_fw_cmd_response *response)
 {
@@ -109,6 +145,8 @@ wmr_controller_send_fw_cmd(struct wmr_bt_controller *d,
 	uint64_t timeout_start = os_monotonic_get_ns();
 	uint64_t timeout_end_ns = timeout_start + timeout_ns;
 	struct os_hid_device *hid = d->controller_hid;
+
+	convert_cmd_prefix_send(d, fw_cmd->buf, sizeof(fw_cmd->buf));
 
 	os_hid_write(hid, fw_cmd->buf, sizeof(fw_cmd->buf));
 
@@ -122,6 +160,8 @@ wmr_controller_send_fw_cmd(struct wmr_bt_controller *d,
 			// Ignore 0-byte reads (timeout) and try again
 			continue;
 		}
+
+		convert_cmd_prefix_recv(d, response->buf, size);
 
 		WMR_TRACE(d, "Controller fw read returned %d bytes", size);
 		if (response->buf[0] == response_code) {
@@ -630,12 +670,12 @@ wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
 }
 
 void
-wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d,
-                                     uint64_t now_ns,
-                                     const unsigned char *buffer,
-                                     int size)
+wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d, uint64_t now_ns, unsigned char *buffer, int size)
 {
 	os_mutex_lock(&d->lock);
+
+	// convert tunnelled packets
+	convert_cmd_prefix_recv(d, buffer, size);
 
 	// Note: skipping msg type byte
 	if (!wmr_controller_packet_parse(&buffer[1], (size_t)size - 1, &d->input, d->log_level)) {

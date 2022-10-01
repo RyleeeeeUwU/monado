@@ -115,10 +115,7 @@ wmr_controller_create_tunnelled(struct os_hid_device *controller_hid,
                                 enum u_logging_level log_level);
 
 void
-wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d,
-                                     uint64_t now_ns,
-                                     const unsigned char *buffer,
-                                     int size);
+wmr_controller_handle_sensors_packet(struct wmr_bt_controller *d, uint64_t now_ns, unsigned char *buffer, int size);
 
 #ifdef __cplusplus
 }

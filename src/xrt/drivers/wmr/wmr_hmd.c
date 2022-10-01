@@ -291,7 +291,7 @@ hololens_handle_bt_iface_packet(struct wmr_hmd *wh, const unsigned char *buffer,
 }
 
 static void
-hololens_handle_controller_packet(struct wmr_hmd *wh, const unsigned char *buffer, int size)
+hololens_handle_controller_packet(struct wmr_hmd *wh, unsigned char *buffer, int size)
 {
 	if (size < 45) {
 		WMR_TRACE(wh, "Got unknown short controller packet (%i)\n\t%02x", size, buffer[0]);
