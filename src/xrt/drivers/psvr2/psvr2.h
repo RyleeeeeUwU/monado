@@ -77,6 +77,21 @@ struct slam_usb_record
 	uint8_t remainder[468];
 } __attribute__((packed));
 
+struct sie_ctrl_pkt
+{
+	__le16 report_id;
+	__le16 subcmd;
+	__le32 len;
+	uint8_t data[512 - 8];
+} __attribute__((packed));
+
+enum psvr2_camera_mode
+{
+	PSVR2_CAMERA_MODE_OFF = 0,
+	PSVR2_CAMERA_MODE_1 = 1,
+	PSVR2_CAMERA_MODE_10 = 0x10,
+};
+
 #ifdef __cplusplus
 }
 #endif

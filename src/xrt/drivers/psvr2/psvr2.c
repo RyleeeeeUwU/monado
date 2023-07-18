@@ -48,8 +48,9 @@
 
 #define USB_STATUS_XFER_SIZE 1024
 
-#define USB_CAM_XFER_SIZE 1040640
-#define NUM_CAM_XFERS 2
+#define USB_CAM_MODE10_XFER_SIZE 1040640
+#define USB_CAM_MODE1_XFER_SIZE 819456
+#define NUM_CAM_XFERS 1
 
 #define GYRO_SCALE (2000.0 / 32767.0)
 #define ACCEL_SCALE (4.0 * MATH_GRAVITY_M_S2 / 32767.0)
@@ -82,6 +83,11 @@ struct psvr2_hmd
 
 	bool ipd_updated;
 	uint8_t ipd_mm;
+
+	bool camera_enable;
+	enum psvr2_camera_mode camera_mode;
+	struct u_var_button camera_enable_btn;
+	struct u_var_button camera_mode_btn;
 
 	/* IMU input data */
 	uint32_t last_vts; /* Last VTS timestamp */
@@ -358,99 +364,64 @@ img_xfer_cb(struct libusb_transfer *xfer)
 
 	if (xfer->actual_length > 0) {
 		PSVR2_TRACE(hmd, "Camera frame - %d bytes", xfer->actual_length);
+		PSVR2_TRACE_HEX(hmd, xfer->buffer, MIN(256, xfer->actual_length));
 
-		if (u_sink_debug_is_active(&hmd->debug_sinks[0])) {
-			int x, y;
-			struct xrt_frame *xf = NULL;
+		if (xfer->actual_length == USB_CAM_MODE10_XFER_SIZE) {
+			for (int d = 0; d < 3; d++) {
+				if (u_sink_debug_is_active(&hmd->debug_sinks[d])) {
+					struct xrt_frame *xf = NULL;
 
-			u_frame_create_one_off(XRT_FORMAT_L8, 256, 508, &xf);
+					int w = 254, h = 508, stride = 256, offset, size_pp;
+					if (d == 0) {
+						offset = d;
+						size_pp = 2;
+						u_frame_create_one_off(XRT_FORMAT_L8, stride * 2, h, &xf);
+					} else if (d == 1 || d == 2) {
+						offset = (d == 1) ? 2 : 5;
+						size_pp = 3;
+						u_frame_create_one_off(XRT_FORMAT_R8G8B8, stride, h, &xf);
+					}
 
-			uint8_t *src = xfer->buffer + 256;
-			uint8_t *dest = xf->data;
-			for (y = 0; y < 508; y++) {
-				for (x = 0; x < 254; x++) {
-					*dest++ = src[0];
-					src += 8;
+					uint8_t *src = xfer->buffer + 256;
+					uint8_t *dest = xf->data;
+					for (int y = 0; y < h; y++) {
+						int x;
+
+						for (x = 0; x < w; x++) {
+							for (int i = 0; i < size_pp; i++) {
+								*dest++ = src[offset + i];
+							}
+							src += 8;
+						}
+						src += 16; /* Skip 16-bytes at the end of each line */
+						           /* Skip output padding pixels */
+						while (x++ < stride) {
+							for (int i = 0; i < size_pp; i++) {
+								*dest++ = 0;
+							}
+						}
+					}
+					xf->timestamp = os_monotonic_get_ns();
+					u_sink_debug_push_frame(&hmd->debug_sinks[d], xf);
+					xrt_frame_reference(&xf, NULL);
 				}
-				src += 16; /* Skip 16-bytes at the end of each line */
-				/* Skip output padding pixels */
-				*dest++ = 0;
-				*dest++ = 0;
 			}
-			xf->timestamp = os_monotonic_get_ns();
-			u_sink_debug_push_frame(&hmd->debug_sinks[0], xf);
-			xrt_frame_reference(&xf, NULL);
-		}
+		} else if (xfer->actual_length == USB_CAM_MODE1_XFER_SIZE) {
+			if (u_sink_debug_is_active(&hmd->debug_sinks[3])) {
 
-		if (u_sink_debug_is_active(&hmd->debug_sinks[1])) {
-			int x, y;
-			struct xrt_frame *xf = NULL;
+				struct xrt_frame *xf = NULL;
+				u_frame_create_one_off(XRT_FORMAT_L8, 1280, 640, &xf);
 
-			u_frame_create_one_off(XRT_FORMAT_L8, 256, 508, &xf);
-
-			uint8_t *src = xfer->buffer + 256;
-			uint8_t *dest = xf->data;
-			for (y = 0; y < 508; y++) {
-				for (x = 0; x < 254; x++) {
-					*dest++ = src[1];
-					src += 8;
-				}
-				src += 16; /* Skip 16-bytes at the end of each line */
-				/* Skip output padding pixels */
-				*dest++ = 0;
-				*dest++ = 0;
+				uint8_t *src = xfer->buffer + 256;
+				uint8_t *dest = xf->data;
+				memcpy(dest, src, 640 * 1280);
+				xf->timestamp = os_monotonic_get_ns();
+				u_sink_debug_push_frame(&hmd->debug_sinks[3], xf);
+				xrt_frame_reference(&xf, NULL);
 			}
-			xf->timestamp = os_monotonic_get_ns();
-			u_sink_debug_push_frame(&hmd->debug_sinks[1], xf);
-			xrt_frame_reference(&xf, NULL);
-		}
-
-		if (u_sink_debug_is_active(&hmd->debug_sinks[2])) {
-			int x, y;
-			struct xrt_frame *xf = NULL;
-
-			u_frame_create_one_off(XRT_FORMAT_R8G8B8, 256, 508, &xf);
-
-			uint8_t *src = xfer->buffer + 256;
-			uint8_t *dest = xf->data;
-			for (y = 0; y < 508; y++) {
-				for (x = 0; x < 254; x++) {
-					*dest++ = src[2];
-					*dest++ = src[3];
-					*dest++ = src[4];
-					src += 8;
-				}
-				src += 16; /* Skip 16-bytes at the end of each line */
-				dest += 6; /* Padding */
-			}
-			xf->timestamp = os_monotonic_get_ns();
-			u_sink_debug_push_frame(&hmd->debug_sinks[2], xf);
-			xrt_frame_reference(&xf, NULL);
-		}
-
-		if (u_sink_debug_is_active(&hmd->debug_sinks[3])) {
-			int x, y;
-			struct xrt_frame *xf = NULL;
-
-			u_frame_create_one_off(XRT_FORMAT_R8G8B8, 256, 508, &xf);
-
-			uint8_t *src = xfer->buffer + 256;
-			uint8_t *dest = xf->data;
-			for (y = 0; y < 508; y++) {
-				for (x = 0; x < 254; x++) {
-					*dest++ = src[5];
-					*dest++ = src[6];
-					*dest++ = src[7];
-					src += 8;
-				}
-				src += 16; /* Skip 16-bytes at the end of each line */
-				dest += 6; /* Padding */
-			}
-			xf->timestamp = os_monotonic_get_ns();
-			u_sink_debug_push_frame(&hmd->debug_sinks[3], xf);
-			xrt_frame_reference(&xf, NULL);
 		}
 	}
+
 	os_mutex_lock(&hmd->data_lock);
 	libusb_submit_transfer(xfer);
 	os_mutex_unlock(&hmd->data_lock);
@@ -465,7 +436,7 @@ process_slam_record(struct psvr2_hmd *hmd, uint8_t *buf, int bytes_read)
 		float f;
 	} u;
 
-	assert(bytes_read >= sizeof(struct slam_usb_record));
+	assert(bytes_read >= (int)sizeof(struct slam_usb_record));
 
 	struct slam_record slam;
 	slam.ts = __le32_to_cpu(usb_data->ts);
@@ -480,7 +451,10 @@ process_slam_record(struct psvr2_hmd *hmd, uint8_t *buf, int bytes_read)
 		slam.orient[i] = u.f;
 	}
 
-	assert(usb_data->unknown1 == 3);
+	if (usb_data->unknown1 != 3) {
+		PSVR2_DEBUG(hmd, "SLAM - unknown1 field was not 3, it was %d", usb_data->unknown1);
+	}
+	// assert(usb_data->unknown1 == 3 || usb_data->unknown1 == 0);
 
 	os_mutex_lock(&hmd->data_lock);
 	//@todo: Manual axis correction should come from calibration somewhere I think
@@ -613,38 +587,82 @@ psvr2_usb_open(struct psvr2_hmd *hmd, struct xrt_prober_device *xpdev)
 }
 
 bool
-send_camera_enable(struct psvr2_hmd *hmd)
+send_psvr2_control(struct psvr2_hmd *hmd, uint8_t report_id, uint8_t subcmd, uint8_t *pkt_data, uint32_t pkt_len)
 {
-	unsigned char pkt_ep0_07[] = {0x07, 0x00, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x4E, 0x00};
-	unsigned char pkt_ep0_0b_1[] = {0x0B, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00, 0x00,
-	                                0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00};
-	unsigned char pkt_ep0_0b_10[] = {0x0B, 0x00, 0x01, 0x00, 0x08, 0x00, 0x00, 0x00,
-	                                 0x01, 0x00, 0x00, 0x00, 0x10, 0x00, 0x00, 0x00};
+	struct sie_ctrl_pkt pkt;
 	int ret;
 
-	ret = libusb_control_transfer(hmd->dev, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_ENDPOINT, 0x9,
-	                              pkt_ep0_07[0], 0x0, pkt_ep0_07, sizeof(pkt_ep0_07), 100);
-	if (ret < 0) {
-		PSVR2_ERROR(hmd, "Failed to send camera enable cmd");
-		return false;
-	}
+	assert(pkt_len <= sizeof(pkt.data));
 
-	ret = libusb_control_transfer(hmd->dev, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_ENDPOINT, 0x9,
-	                              pkt_ep0_0b_1[0], 0x0, pkt_ep0_0b_1, sizeof(pkt_ep0_0b_1), 100);
-	if (ret < 0) {
-		PSVR2_ERROR(hmd, "Failed to send camera enable cmd");
-		return false;
-	}
+	pkt.report_id = __cpu_to_le16(report_id);
+	pkt.subcmd = __cpu_to_le16(subcmd);
+	pkt.len = __cpu_to_le32(pkt_len);
+	memcpy(pkt.data, pkt_data, pkt_len);
 
-	ret = libusb_control_transfer(hmd->dev, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_ENDPOINT, 0x9,
-	                              pkt_ep0_0b_10[0], 0x0, pkt_ep0_0b_10, sizeof(pkt_ep0_0b_10), 100);
+	ret = libusb_control_transfer(hmd->dev, LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_ENDPOINT, 0x9, report_id,
+	                              0x0, (unsigned char *)&pkt, pkt_len + 8, 100);
 	if (ret < 0) {
-		PSVR2_ERROR(hmd, "Failed to send camera enable cmd");
+		PSVR2_ERROR(hmd, "Failed to send report id %u subcmd %u", report_id, subcmd);
 		return false;
 	}
 
 	return true;
 }
+
+bool
+set_camera_mode(struct psvr2_hmd *hmd, enum psvr2_camera_mode mode)
+{
+	struct camera_cmd
+	{
+		__le32 data[2];
+	} cmd;
+
+	cmd.data[0] = __cpu_to_le32(0x1);
+	cmd.data[1] = __cpu_to_le32(mode);
+
+	return send_psvr2_control(hmd, 0xB, 0x1, (uint8_t *)(&cmd), sizeof(cmd));
+}
+
+static void
+toggle_camera_enable(struct psvr2_hmd *hmd)
+{
+	hmd->camera_enable = !hmd->camera_enable;
+
+	struct u_var_button *btn = &hmd->camera_enable_btn;
+	snprintf(btn->label, sizeof(btn->label),
+	         hmd->camera_enable ? "Disable camera streams" : "Enable camera streams");
+
+	if (hmd->camera_enable) {
+		set_camera_mode(hmd, hmd->camera_mode);
+	} else {
+		set_camera_mode(hmd, PSVR2_CAMERA_MODE_OFF);
+	}
+}
+
+static void
+cycle_camera_mode(struct psvr2_hmd *hmd)
+{
+	struct u_var_button *btn = &hmd->camera_mode_btn;
+
+	switch (hmd->camera_mode) {
+	case PSVR2_CAMERA_MODE_OFF:
+	case PSVR2_CAMERA_MODE_1:
+		hmd->camera_mode = PSVR2_CAMERA_MODE_10;
+		snprintf(btn->label, sizeof(btn->label), "Camera Mode 0x10");
+		break;
+	case PSVR2_CAMERA_MODE_10:
+		hmd->camera_mode = PSVR2_CAMERA_MODE_1;
+		snprintf(btn->label, sizeof(btn->label), "Camera Mode 0x1");
+		break;
+	}
+
+	if (hmd->camera_enable) {
+		set_camera_mode(hmd, hmd->camera_mode);
+	} else {
+		set_camera_mode(hmd, PSVR2_CAMERA_MODE_OFF);
+	}
+}
+
 
 static bool
 psvr2_usb_start(struct psvr2_hmd *hmd)
@@ -672,7 +690,9 @@ psvr2_usb_start(struct psvr2_hmd *hmd)
 	hmd->usb_active_xfers++;
 
 	/* Camera data */
-	send_camera_enable(hmd);
+	hmd->camera_enable = true;
+	hmd->camera_mode = PSVR2_CAMERA_MODE_10;
+	set_camera_mode(hmd, hmd->camera_mode);
 
 	for (int i = 0; i < NUM_CAM_XFERS; i++) {
 		hmd->camera_xfers[i] = libusb_alloc_transfer(0);
@@ -681,10 +701,10 @@ psvr2_usb_start(struct psvr2_hmd *hmd)
 			goto out;
 		}
 
-		uint8_t *recv_buf = malloc(USB_CAM_XFER_SIZE);
+		uint8_t *recv_buf = malloc(USB_CAM_MODE10_XFER_SIZE);
 
 		libusb_fill_bulk_transfer(hmd->camera_xfers[i], hmd->dev, LIBUSB_ENDPOINT_IN | PSVR2_CAMERA_ENDPOINT,
-		                          recv_buf, USB_CAM_XFER_SIZE, img_xfer_cb, hmd, 0);
+		                          recv_buf, USB_CAM_MODE10_XFER_SIZE, img_xfer_cb, hmd, 0);
 		hmd->camera_xfers[i]->flags |= LIBUSB_TRANSFER_FREE_BUFFER;
 
 		res = libusb_submit_transfer(hmd->camera_xfers[i]);
@@ -919,11 +939,21 @@ psvr2_hmd_create(struct xrt_prober_device *xpdev)
 	u_var_add_u8(hmd, &hmd->ipd_mm, "HMD IPD (mm)");
 
 	u_var_add_gui_header(hmd, NULL, "Camera data");
-	for (int i = 0; i < 4; i++) {
+	{
+		hmd->camera_enable_btn.cb = (void (*)(void *))toggle_camera_enable;
+		hmd->camera_enable_btn.ptr = hmd;
+		u_var_add_button(hmd, &hmd->camera_enable_btn, "Disabel camera streams");
+
+		hmd->camera_mode_btn.cb = (void (*)(void *))cycle_camera_mode;
+		hmd->camera_mode_btn.ptr = hmd;
+		u_var_add_button(hmd, &hmd->camera_mode_btn, "Camera Mode 0x10");
+	}
+	for (int i = 0; i < 3; i++) {
 		char name[32];
 		sprintf(name, "Substream %d", i);
 		u_var_add_sink_debug(hmd, &hmd->debug_sinks[i], name);
 	}
+	u_var_add_sink_debug(hmd, &hmd->debug_sinks[3], "Mode 1 stream");
 
 	u_var_add_gui_header(hmd, NULL, "Logging");
 	u_var_add_log_level(hmd, &hmd->log_level, "log_level");
