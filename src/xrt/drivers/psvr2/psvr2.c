@@ -647,8 +647,8 @@ cycle_camera_mode(struct psvr2_hmd *hmd)
 	switch (hmd->camera_mode) {
 	case PSVR2_CAMERA_MODE_OFF:
 	case PSVR2_CAMERA_MODE_1:
-		hmd->camera_mode = PSVR2_CAMERA_MODE_10;
-		snprintf(btn->label, sizeof(btn->label), "Camera Mode 0x10");
+		hmd->camera_mode++;
+		snprintf(btn->label, sizeof(btn->label), "Camera Mode 0x%x", hmd->camera_mode);
 		break;
 	case PSVR2_CAMERA_MODE_10:
 		hmd->camera_mode = PSVR2_CAMERA_MODE_1;
