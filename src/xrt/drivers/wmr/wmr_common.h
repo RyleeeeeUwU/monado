@@ -35,6 +35,7 @@ enum wmr_headset_type
 	WMR_HEADSET_SAMSUNG_800ZAA,
 	WMR_HEADSET_LENOVO_EXPLORER,
 	WMR_HEADSET_MEDION_ERAZER_X1000,
+	WMR_HEADSET_ACER_AH100,
 };
 
 /*!
@@ -69,6 +70,9 @@ enum wmr_headset_type
 
 #define QUANTA_VID 0x0408 /* Medion? */
 #define MEDION_ERAZER_X1000_PID 0xb5d5
+
+#define ACER_VID 0x0502
+#define ACER_AH100_PID 0xb0d6
 
 /*!
  * @}
