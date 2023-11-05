@@ -101,6 +101,8 @@ static void
 wmr_hmd_deactivate_odyssey_plus(struct wmr_hmd *wh);
 static void
 wmr_hmd_screen_enable_odyssey_plus(struct wmr_hmd *wh, bool enable);
+static int
+wmr_hmd_activate_acer_ah100(struct wmr_hmd *wh);
 
 const struct wmr_headset_descriptor headset_map[] = {
     {WMR_HEADSET_GENERIC, NULL, "Unknown WMR HMD", NULL, NULL, NULL}, /* Catch-all for unknown headsets */
@@ -115,7 +117,7 @@ const struct wmr_headset_descriptor headset_map[] = {
      wmr_hmd_activate_odyssey_plus, wmr_hmd_deactivate_odyssey_plus, wmr_hmd_screen_enable_odyssey_plus},
     {WMR_HEADSET_LENOVO_EXPLORER, "Lenovo VR-2511N", "Lenovo Explorer", NULL, NULL, NULL},
     {WMR_HEADSET_MEDION_ERAZER_X1000, "Medion Erazer X1000", "Medion Erazer", NULL, NULL, NULL},
-    {WMR_HEADSET_ACER_AH100, "Acer AH100", "Acer AH100", NULL, NULL, NULL},
+    {WMR_HEADSET_ACER_AH100, "Acer AH100", "Acer AH100", wmr_hmd_activate_acer_ah100, NULL, NULL},
 };
 const int headset_map_n = sizeof(headset_map) / sizeof(headset_map[0]);
 
@@ -880,6 +882,59 @@ wmr_hmd_screen_enable_odyssey_plus(struct wmr_hmd *wh, bool enable)
 
 	// Update debug GUI button labels.
 	wmr_hmd_refresh_debug_gui(wh);
+}
+
+static int
+wmr_hmd_activate_acer_ah100(struct wmr_hmd *wh)
+{
+	DRV_TRACE_MARKER();
+
+	struct os_hid_device *hid = wh->hid_control_dev;
+
+	WMR_TRACE(wh, "Activating Acer AH100...");
+
+	os_nanosleep(U_TIME_1MS_IN_NS * 300);
+
+	{
+		unsigned char cmd[25] = {
+		    0x0b,
+		    0,
+		    0,
+		    6,
+		};
+		HID_SEND(wh, hid, cmd, "loop");
+	}
+
+	unsigned char data[8] = {0xb};
+	HID_GET(wh, hid, data, "data_1");
+
+	{
+		unsigned char cmd[25] = {
+		    0x0b, 0, 0, 0x2f, 0xf8, 0x00, 0xff, 0xff,
+		};
+		HID_SEND(wh, hid, cmd, "loop");
+	}
+
+	{
+		unsigned char cmd[25] = {
+		    0x0b,
+		    0,
+		    0,
+		    0x30,
+		};
+		HID_SEND(wh, hid, cmd, "loop");
+	}
+
+	HID_GET(wh, hid, data, "data_2");
+
+	// Allow time for enumeration of available displays by host system, so the compositor can select among them.
+	WMR_INFO(wh,
+	         "Sleep until the HMD display is powered up, so the available displays can be enumerated by the host "
+	         "system.");
+
+	os_nanosleep(3LL * U_TIME_1S_IN_NS);
+
+	return 0;
 }
 
 static void
