@@ -1989,7 +1989,7 @@ wmr_hmd_create(enum wmr_headset_type hmd_type,
 			break;
 		}
 	}
-	if (wh->hmd_desc != NULL) { /* Each supported device MUST have a manually created entry in our headset_map */
+	if (wh->hmd_desc == NULL) { /* Each supported device MUST have a manually created entry in our headset_map */
 		WMR_ERROR(wh, "Please add headset with type %d to the headset_map!", hmd_type);
 		wmr_hmd_destroy(&wh->base);
 		wh = NULL;
