@@ -29,6 +29,7 @@
 #include "math/m_predict.h"
 #include "math/m_vec2.h"
 
+#include "util/u_file.h"
 #include "util/u_var.h"
 #include "util/u_misc.h"
 #include "util/u_time.h"
@@ -86,6 +87,7 @@ DEBUG_GET_ONCE_OPTION(slam_submit_from_start, "SLAM_SUBMIT_FROM_START", NULL)
 DEBUG_GET_ONCE_NUM_OPTION(left_view_y_offset, "WMR_LEFT_DISPLAY_VIEW_Y_OFFSET", 0)
 DEBUG_GET_ONCE_NUM_OPTION(right_view_y_offset, "WMR_RIGHT_DISPLAY_VIEW_Y_OFFSET", 0)
 
+DEBUG_GET_ONCE_OPTION(wmr_config_override, "WMR_HMD_CONFIG_OVERRIDE", NULL)
 
 #define WMR_TRACE(d, ...) U_LOG_XDEV_IFL_T(&d->base, d->log_level, __VA_ARGS__)
 #define WMR_DEBUG(d, ...) U_LOG_XDEV_IFL_D(&d->base, d->log_level, __VA_ARGS__)
@@ -1022,37 +1024,50 @@ wmr_read_config(struct wmr_hmd *wh)
 	size_t data_size;
 	int ret;
 
-	// Read config
-	ret = wmr_read_config_raw(wh, &data, &data_size);
-	if (ret < 0)
-		return ret;
-
-	/* De-obfuscate the JSON config */
-	/* FIXME: The header contains little-endian values that need swapping for big-endian */
-	struct wmr_config_header *hdr = (struct wmr_config_header *)data;
-
-	/* Take a copy of the header */
-	memcpy(&wh->config_hdr, hdr, sizeof(struct wmr_config_header));
-
-	WMR_INFO(wh, "Manufacturer: %.*s", (int)sizeof(hdr->manufacturer), hdr->manufacturer);
-	WMR_INFO(wh, "Device: %.*s", (int)sizeof(hdr->device), hdr->device);
-	WMR_INFO(wh, "Serial: %.*s", (int)sizeof(hdr->serial), hdr->serial);
-	WMR_INFO(wh, "UID: %.*s", (int)sizeof(hdr->uid), hdr->uid);
-	WMR_INFO(wh, "Name: %.*s", (int)sizeof(hdr->name), hdr->name);
-	WMR_INFO(wh, "Revision: %.*s", (int)sizeof(hdr->revision), hdr->revision);
-	WMR_INFO(wh, "Revision Date: %.*s", (int)sizeof(hdr->revision_date), hdr->revision_date);
-
-	snprintf(wh->base.str, XRT_DEVICE_NAME_LEN, "%.*s", (int)sizeof(hdr->name), hdr->name);
-
-	if (hdr->json_start >= data_size || (data_size - hdr->json_start) < hdr->json_size) {
-		WMR_ERROR(wh, "Invalid WMR config block - incorrect sizes");
-		free(data);
-		return -1;
+	const char *config_override_file = debug_get_option_wmr_config_override();
+	if (config_override_file != NULL) {
+		data = (unsigned char *)u_file_read_content_from_path(config_override_file);
+		if (data == NULL) {
+			WMR_ERROR(wh, "Could not load WMR HMD config from the provided path.");
+			return -1;
+		} else {
+			config_json_block = data;
+		}
 	}
 
-	config_json_block = data + hdr->json_start + sizeof(uint16_t);
-	for (unsigned int i = 0; i < hdr->json_size - sizeof(uint16_t); i++) {
-		config_json_block[i] ^= wmr_config_key[i % sizeof(wmr_config_key)];
+	if (data == NULL) {
+		// Read config
+		ret = wmr_read_config_raw(wh, &data, &data_size);
+		if (ret < 0)
+			return ret;
+
+		/* De-obfuscate the JSON config */
+		/* FIXME: The header contains little-endian values that need swapping for big-endian */
+		struct wmr_config_header *hdr = (struct wmr_config_header *)data;
+
+		/* Take a copy of the header */
+		memcpy(&wh->config_hdr, hdr, sizeof(struct wmr_config_header));
+
+		WMR_INFO(wh, "Manufacturer: %.*s", (int)sizeof(hdr->manufacturer), hdr->manufacturer);
+		WMR_INFO(wh, "Device: %.*s", (int)sizeof(hdr->device), hdr->device);
+		WMR_INFO(wh, "Serial: %.*s", (int)sizeof(hdr->serial), hdr->serial);
+		WMR_INFO(wh, "UID: %.*s", (int)sizeof(hdr->uid), hdr->uid);
+		WMR_INFO(wh, "Name: %.*s", (int)sizeof(hdr->name), hdr->name);
+		WMR_INFO(wh, "Revision: %.*s", (int)sizeof(hdr->revision), hdr->revision);
+		WMR_INFO(wh, "Revision Date: %.*s", (int)sizeof(hdr->revision_date), hdr->revision_date);
+
+		snprintf(wh->base.str, XRT_DEVICE_NAME_LEN, "%.*s", (int)sizeof(hdr->name), hdr->name);
+
+		if (hdr->json_start >= data_size || (data_size - hdr->json_start) < hdr->json_size) {
+			WMR_ERROR(wh, "Invalid WMR config block - incorrect sizes");
+			free(data);
+			return -1;
+		}
+
+		config_json_block = data + hdr->json_start + sizeof(uint16_t);
+		for (unsigned int i = 0; i < hdr->json_size - sizeof(uint16_t); i++) {
+			config_json_block[i] ^= wmr_config_key[i % sizeof(wmr_config_key)];
+		}
 	}
 
 	WMR_DEBUG(wh, "JSON config:\n%s", config_json_block);
