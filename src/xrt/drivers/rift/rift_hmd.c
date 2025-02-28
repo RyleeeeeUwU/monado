@@ -60,18 +60,6 @@ DEBUG_GET_ONCE_LOG_OPTION(rift_log, "RIFT_LOG", U_LOGGING_WARN)
  *
  */
 
-#define REPORT_BUFFER_SIZE 256
-
-#define DK2_REPORT_ID_KEEPALIVE_MUX 17
-
-#define IN_REPORT_DK2 11
-struct dk2_report_keepalive_mux {
-	uint16_t command;
-	uint8_t in_report;
-	uint16_t interval;
-};
-
-
 static int rift_send_report(struct rift_hmd *hmd, uint8_t report_id, void *data, size_t data_length)
 {
 	#define REPORT_WRITE_DATA(ptr, ptr_len) \
@@ -86,7 +74,7 @@ static int rift_send_report(struct rift_hmd *hmd, uint8_t report_id, void *data,
 
 	int result;
 
-	uint8_t buffer[REPORT_BUFFER_SIZE];
+	uint8_t buffer[REPORT_MAX_SIZE];
 	size_t length = 0;
 
 	REPORT_WRITE_VALUE(report_id)
@@ -100,11 +88,65 @@ static int rift_send_report(struct rift_hmd *hmd, uint8_t report_id, void *data,
 	return 0;
 }
 
+static int rift_get_report(struct rift_hmd *hmd, uint8_t report_id, uint8_t *out, size_t out_len)
+{
+	return os_hid_get_feature(hmd->hid_dev, report_id, out, out_len);
+}
+
 static int rift_send_keepalive(struct rift_hmd *hmd)
 {
 	struct dk2_report_keepalive_mux report = {0, IN_REPORT_DK2, 10000};
 
-	return rift_send_report(hmd, DK2_REPORT_ID_KEEPALIVE_MUX, &report, sizeof(struct dk2_report_keepalive_mux));
+	int result = rift_send_report(hmd, FEATURE_REPORT_KEEPALIVE_MUX, &report, sizeof(struct dk2_report_keepalive_mux));
+
+	if(result < 0) {
+		return result;
+	}
+
+	hmd->last_keepalive_time = os_monotonic_get_ns();
+
+	return 0;
+}
+
+static int rift_get_config(struct rift_hmd *hmd, struct rift_config_report *config)
+{
+	uint8_t buf[REPORT_MAX_SIZE] = {0};
+
+	int result = rift_get_report(hmd, FEATURE_REPORT_CONFIG, buf, sizeof(buf));
+	if(result < 0) {
+		return result;
+	}
+
+	// FIXME: handle endian differences
+	memcpy(config, buf + 1, sizeof(*config));
+
+	// this value is hardcoded in the DK1 and DK2 firmware
+	if((hmd->variant == RIFT_VARIANT_DK1 || hmd->variant == RIFT_VARIANT_DK2) && config->sample_rate != 1000) {
+		HMD_ERROR(hmd, "Got invalid config from headset, got sample rate %d when expected %d", config->sample_rate, 1000);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int rift_get_display_info(struct rift_hmd *hmd, struct rift_display_info_report *display_info) 
+{
+	uint8_t buf[REPORT_MAX_SIZE] = {0};
+
+	int result = rift_get_report(hmd, FEATURE_REPORT_DISPLAY_INFO, buf, sizeof(buf));
+	if(result < 0) {
+		return result;
+	}
+
+	// FIXME: handle endian differences
+	memcpy(display_info, buf + 1, sizeof(*display_info));
+
+	return 0;
+}
+
+static int rift_set_config(struct rift_hmd *hmd, struct rift_config_report *config)
+{
+	return rift_send_report(hmd, FEATURE_REPORT_CONFIG, &config, sizeof(*config));
 }
 
 /*
@@ -120,7 +162,6 @@ rift_hmd_destroy(struct xrt_device *xdev)
 
 	// Remove the variable tracking.
 	u_var_remove_root(hmd);
-
 
 	m_relation_history_destroy(&hmd->relation_hist);
 
@@ -210,9 +251,38 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char* devi
 	result = rift_send_keepalive(hmd);
 	if(result < 0) {
 		HMD_ERROR(hmd, "Failed to send keepalive to spin up headset, reason %d", result);
+		u_device_free(&hmd->base);
 		return NULL;
 	}
-	hmd->last_keepalive_time = os_monotonic_get_ns();
+
+	result = rift_get_config(hmd, &hmd->config);
+	if(result < 0) {
+		HMD_ERROR(hmd, "Failed to get device config, reason %d", result);
+		u_device_free(&hmd->base);
+		return NULL;
+	}
+	HMD_INFO(hmd, "Got config from hmd, config flags: %X", hmd->config.config_flags);
+
+	result = rift_get_display_info(hmd, &hmd->display_info);
+	if(result < 0) {
+		HMD_ERROR(hmd, "Failed to get device config, reason %d", result);
+		u_device_free(&hmd->base);
+		return NULL;
+	}
+	HMD_INFO(hmd, "Got display info from hmd, res: %dx%d", hmd->display_info.resolution_x, hmd->display_info.resolution_y);
+
+	if(getenv("RIFT_POWER_OVERRIDE") != NULL) {
+		hmd->config.config_flags |= RIFT_CONFIG_REPORT_OVERRIDE_POWER;
+
+		HMD_INFO(hmd, "Force-enabling the override power config flag.");
+
+		result = rift_set_config(hmd, &hmd->config);
+		if(result < 0) {
+			HMD_ERROR(hmd, "Failed to enable the override power config flag, reason %d", result);
+			u_device_free(&hmd->base);
+			return NULL;
+		}
+	}
 
 	// This list should be ordered, most preferred first.
 	size_t idx = 0;
