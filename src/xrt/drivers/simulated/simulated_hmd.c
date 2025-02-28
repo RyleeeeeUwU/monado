@@ -219,6 +219,7 @@ simulated_hmd_create(enum simulated_movement movement, const struct xrt_pose *ce
 	// Setup info.
 	bool ret = true;
 	struct u_device_simple_info info;
+	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_NONE;
 	info.display.w_pixels = 1280;
 	info.display.h_pixels = 720;
 	info.display.w_meters = 0.13f;

@@ -353,6 +353,7 @@ ipc_client_hmd_create(struct ipc_connection *ipc_c, struct xrt_tracking_origin *
 #if 0
 	// Setup info.
 	struct u_device_simple_info info;
+	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_NONE;
 	info.display.w_pixels = 1920;
 	info.display.h_pixels = 1080;
 	info.display.w_meters = 0.13f;

@@ -907,6 +907,7 @@ switch_display_mode(struct xreal_air_hmd *hmd, uint8_t display_mode)
 	}
 
 	struct u_device_simple_info info;
+	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_NONE;
 	info.display.w_pixels = 1920;
 	info.display.h_pixels = 1080;
 	info.display.w_meters = 0.13f;

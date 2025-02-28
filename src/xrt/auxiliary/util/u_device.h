@@ -46,6 +46,14 @@ struct u_extents_2d
 	uint32_t h_pixels; // Height of entire screen
 };
 
+enum u_display_rotation_quirk
+{
+	DISPLAY_ROTATION_QUIRK_NONE,
+	DISPLAY_ROTATION_QUIRK_LEFT,
+	DISPLAY_ROTATION_QUIRK_RIGHT,
+	DISPLAY_ROTATION_QUIRK_180,
+};
+
 /*!
  *
  * Info to describe a very simple headset with diffractive lens optics.
@@ -59,6 +67,8 @@ struct u_device_simple_info
 		uint32_t h_pixels;
 		float w_meters;
 		float h_meters;
+
+		enum u_display_rotation_quirk rotation_quirk;
 	} display;
 
 	float lens_horizontal_separation_meters;
