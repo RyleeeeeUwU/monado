@@ -60,17 +60,19 @@ DEBUG_GET_ONCE_LOG_OPTION(rift_log, "RIFT_LOG", U_LOGGING_WARN)
  *
  */
 
-static int rift_send_report(struct rift_hmd *hmd, uint8_t report_id, void *data, size_t data_length)
+static int
+rift_send_report(struct rift_hmd *hmd, uint8_t report_id, void *data, size_t data_length)
 {
-	#define REPORT_WRITE_DATA(ptr, ptr_len) \
-		if (ptr_len > sizeof(buffer) - length) { \
-			HMD_ERROR(hmd, "Tried to fit %ld bytes into buffer with only %ld bytes left", ptr_len, sizeof(buffer) - length); \
-			return -1; \
-		} \
-		memcpy(buffer + length, ptr, ptr_len); \
-		length += ptr_len;
+#define REPORT_WRITE_DATA(ptr, ptr_len)                                                                                \
+	if (ptr_len > sizeof(buffer) - length) {                                                                       \
+		HMD_ERROR(hmd, "Tried to fit %ld bytes into buffer with only %ld bytes left", ptr_len,                 \
+		          sizeof(buffer) - length);                                                                    \
+		return -1;                                                                                             \
+	}                                                                                                              \
+	memcpy(buffer + length, ptr, ptr_len);                                                                         \
+	length += ptr_len;
 
-	#define REPORT_WRITE_VALUE(value) REPORT_WRITE_DATA(&value, sizeof(value));
+#define REPORT_WRITE_VALUE(value) REPORT_WRITE_DATA(&value, sizeof(value));
 
 	int result;
 
@@ -81,25 +83,28 @@ static int rift_send_report(struct rift_hmd *hmd, uint8_t report_id, void *data,
 	REPORT_WRITE_DATA(data, data_length)
 
 	result = os_hid_set_feature(hmd->hid_dev, buffer, length);
-	if(result < 0) {
+	if (result < 0) {
 		return result;
 	}
 
 	return 0;
 }
 
-static int rift_get_report(struct rift_hmd *hmd, uint8_t report_id, uint8_t *out, size_t out_len)
+static int
+rift_get_report(struct rift_hmd *hmd, uint8_t report_id, uint8_t *out, size_t out_len)
 {
 	return os_hid_get_feature(hmd->hid_dev, report_id, out, out_len);
 }
 
-static int rift_send_keepalive(struct rift_hmd *hmd)
+static int
+rift_send_keepalive(struct rift_hmd *hmd)
 {
 	struct dk2_report_keepalive_mux report = {0, IN_REPORT_DK2, 10000};
 
-	int result = rift_send_report(hmd, FEATURE_REPORT_KEEPALIVE_MUX, &report, sizeof(struct dk2_report_keepalive_mux));
+	int result =
+	    rift_send_report(hmd, FEATURE_REPORT_KEEPALIVE_MUX, &report, sizeof(struct dk2_report_keepalive_mux));
 
-	if(result < 0) {
+	if (result < 0) {
 		return result;
 	}
 
@@ -108,12 +113,13 @@ static int rift_send_keepalive(struct rift_hmd *hmd)
 	return 0;
 }
 
-static int rift_get_config(struct rift_hmd *hmd, struct rift_config_report *config)
+static int
+rift_get_config(struct rift_hmd *hmd, struct rift_config_report *config)
 {
 	uint8_t buf[REPORT_MAX_SIZE] = {0};
 
 	int result = rift_get_report(hmd, FEATURE_REPORT_CONFIG, buf, sizeof(buf));
-	if(result < 0) {
+	if (result < 0) {
 		return result;
 	}
 
@@ -121,20 +127,22 @@ static int rift_get_config(struct rift_hmd *hmd, struct rift_config_report *conf
 	memcpy(config, buf + 1, sizeof(*config));
 
 	// this value is hardcoded in the DK1 and DK2 firmware
-	if((hmd->variant == RIFT_VARIANT_DK1 || hmd->variant == RIFT_VARIANT_DK2) && config->sample_rate != 1000) {
-		HMD_ERROR(hmd, "Got invalid config from headset, got sample rate %d when expected %d", config->sample_rate, 1000);
+	if ((hmd->variant == RIFT_VARIANT_DK1 || hmd->variant == RIFT_VARIANT_DK2) && config->sample_rate != 1000) {
+		HMD_ERROR(hmd, "Got invalid config from headset, got sample rate %d when expected %d",
+		          config->sample_rate, 1000);
 		return -1;
 	}
 
 	return 0;
 }
 
-static int rift_get_display_info(struct rift_hmd *hmd, struct rift_display_info_report *display_info) 
+static int
+rift_get_display_info(struct rift_hmd *hmd, struct rift_display_info_report *display_info)
 {
 	uint8_t buf[REPORT_MAX_SIZE] = {0};
 
 	int result = rift_get_report(hmd, FEATURE_REPORT_DISPLAY_INFO, buf, sizeof(buf));
-	if(result < 0) {
+	if (result < 0) {
 		return result;
 	}
 
@@ -144,7 +152,8 @@ static int rift_get_display_info(struct rift_hmd *hmd, struct rift_display_info_
 	return 0;
 }
 
-static int rift_set_config(struct rift_hmd *hmd, struct rift_config_report *config)
+static int
+rift_set_config(struct rift_hmd *hmd, struct rift_config_report *config)
 {
 	return rift_send_report(hmd, FEATURE_REPORT_CONFIG, &config, sizeof(*config));
 }
@@ -170,9 +179,9 @@ rift_hmd_destroy(struct xrt_device *xdev)
 
 static xrt_result_t
 rift_hmd_get_tracked_pose(struct xrt_device *xdev,
-                            enum xrt_input_name name,
-                            int64_t at_timestamp_ns,
-                            struct xrt_space_relation *out_relation)
+                          enum xrt_input_name name,
+                          int64_t at_timestamp_ns,
+                          struct xrt_space_relation *out_relation)
 {
 	struct rift_hmd *hmd = rift_hmd(xdev);
 
@@ -202,12 +211,12 @@ rift_hmd_get_tracked_pose(struct xrt_device *xdev,
 
 static void
 rift_hmd_get_view_poses(struct xrt_device *xdev,
-                          const struct xrt_vec3 *default_eye_relation,
-                          int64_t at_timestamp_ns,
-                          uint32_t view_count,
-                          struct xrt_space_relation *out_head_relation,
-                          struct xrt_fov *out_fovs,
-                          struct xrt_pose *out_poses)
+                        const struct xrt_vec3 *default_eye_relation,
+                        int64_t at_timestamp_ns,
+                        uint32_t view_count,
+                        struct xrt_space_relation *out_head_relation,
+                        struct xrt_fov *out_fovs,
+                        struct xrt_pose *out_poses)
 {
 	/*
 	 * For HMDs you can call this function or directly set
@@ -225,17 +234,25 @@ rift_hmd_get_view_poses(struct xrt_device *xdev,
 
 static xrt_result_t
 rift_hmd_get_visibility_mask(struct xrt_device *xdev,
-                               enum xrt_visibility_mask_type type,
-                               uint32_t view_index,
-                               struct xrt_visibility_mask **out_mask)
+                             enum xrt_visibility_mask_type type,
+                             uint32_t view_index,
+                             struct xrt_visibility_mask **out_mask)
 {
 	struct xrt_fov fov = xdev->hmd->distortion.fov[view_index];
 	u_visibility_mask_get_default(type, &fov, out_mask);
 	return XRT_SUCCESS;
 }
 
+static bool
+rift_hmd_compute_distortion(struct xrt_device *dev, uint32_t view, float u, float v, struct xrt_uv_triplet *out_result)
+{
+	struct rift_hmd *hmd = rift_hmd(dev);
+
+	return false;
+}
+
 struct rift_hmd *
-rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char* device_name, char *serial_number)
+rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *device_name, char *serial_number)
 {
 	int result;
 
@@ -247,16 +264,16 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char* devi
 
 	hmd->variant = variant;
 	hmd->hid_dev = dev;
-	
+
 	result = rift_send_keepalive(hmd);
-	if(result < 0) {
+	if (result < 0) {
 		HMD_ERROR(hmd, "Failed to send keepalive to spin up headset, reason %d", result);
 		u_device_free(&hmd->base);
 		return NULL;
 	}
 
 	result = rift_get_config(hmd, &hmd->config);
-	if(result < 0) {
+	if (result < 0) {
 		HMD_ERROR(hmd, "Failed to get device config, reason %d", result);
 		u_device_free(&hmd->base);
 		return NULL;
@@ -264,24 +281,31 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char* devi
 	HMD_INFO(hmd, "Got config from hmd, config flags: %X", hmd->config.config_flags);
 
 	result = rift_get_display_info(hmd, &hmd->display_info);
-	if(result < 0) {
+	if (result < 0) {
 		HMD_ERROR(hmd, "Failed to get device config, reason %d", result);
 		u_device_free(&hmd->base);
 		return NULL;
 	}
-	HMD_INFO(hmd, "Got display info from hmd, res: %dx%d", hmd->display_info.resolution_x, hmd->display_info.resolution_y);
+	HMD_INFO(hmd, "Got display info from hmd, res: %dx%d", hmd->display_info.resolution_x,
+	         hmd->display_info.resolution_y);
 
-	if(getenv("RIFT_POWER_OVERRIDE") != NULL) {
+	if (getenv("RIFT_POWER_OVERRIDE") != NULL) {
 		hmd->config.config_flags |= RIFT_CONFIG_REPORT_OVERRIDE_POWER;
-
 		HMD_INFO(hmd, "Force-enabling the override power config flag.");
+	}
 
-		result = rift_set_config(hmd, &hmd->config);
-		if(result < 0) {
-			HMD_ERROR(hmd, "Failed to enable the override power config flag, reason %d", result);
-			u_device_free(&hmd->base);
-			return NULL;
-		}
+	// force enable calibration use and auto calibration
+	// this is on by default according to the firmware on DK1 and DK2,
+	// but OpenHMD forces them on, we should do the same, they probably had a reason
+	hmd->config.config_flags |= RIFT_CONFIG_REPORT_USE_CALIBRATION;
+	hmd->config.config_flags |= RIFT_CONFIG_REPORT_AUTO_CALIBRATION;
+
+	// update the config
+	result = rift_set_config(hmd, &hmd->config);
+	if (result < 0) {
+		HMD_ERROR(hmd, "Failed to enable the override power config flag, reason %d", result);
+		u_device_free(&hmd->base);
+		return NULL;
 	}
 
 	// This list should be ordered, most preferred first.
@@ -321,47 +345,28 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char* devi
 	// refresh rate
 	hmd->base.hmd->screens[0].nominal_frame_interval_ns = time_s_to_ns(1.0f / 75.0f);
 
-	const double hFOV = 90 * (M_PI / 180.0);
-	const double vFOV = 96.73 * (M_PI / 180.0);
-	// center of projection
-	const double hCOP = 0.529;
-	const double vCOP = 0.5;
-	if (
-	    /* right eye */
-	    !math_compute_fovs(1, hCOP, hFOV, 1, vCOP, vFOV, &hmd->base.hmd->distortion.fov[1]) ||
-	    /*
-	     * left eye - same as right eye, except the horizontal center of projection is moved in the opposite
-	     * direction now
-	     */
-	    !math_compute_fovs(1, 1.0 - hCOP, hFOV, 1, vCOP, vFOV, &hmd->base.hmd->distortion.fov[0])) {
-		// If those failed, it means our math was impossible.
+	struct u_device_simple_info info;
+	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_LEFT;
+	info.display.w_pixels = hmd->display_info.resolution_x;
+	info.display.h_pixels = hmd->display_info.resolution_y;
+	info.display.w_meters = (float)hmd->display_info.display_width / 1000000.0f; // micrometers -> meters
+	info.display.h_meters = (float)hmd->display_info.display_height / 1000000.0f;
+
+	info.lens_horizontal_separation_meters = (float)hmd->display_info.lens_separation / 1000000.0f;
+
+	// TODO: this is per eye on the headset, but we're just taking the left eye for this, we should be using both
+	// eyes, ideally
+	info.lens_vertical_position_meters = (float)hmd->display_info.lens_distance_l / 1000000.0f;
+
+	// TODO: calculate this
+	info.fov[0] = (float)(93.0 * (M_PI / 180.0));
+	info.fov[1] = (float)(99.0 * (M_PI / 180.0));
+
+	if (!u_device_setup_split_side_by_side(&hmd->base, &info)) {
 		HMD_ERROR(hmd, "Failed to setup basic device info");
 		rift_hmd_destroy(&hmd->base);
 		return NULL;
 	}
-	const int panel_w = 1080;
-	const int panel_h = 1200;
-
-	// Single "screen" (always the case)
-	hmd->base.hmd->screens[0].w_pixels = panel_w * 2;
-	hmd->base.hmd->screens[0].h_pixels = panel_h;
-
-	// Left, Right
-	for (uint8_t eye = 0; eye < 2; ++eye) {
-		hmd->base.hmd->views[eye].display.w_pixels = panel_w;
-		hmd->base.hmd->views[eye].display.h_pixels = panel_h;
-		hmd->base.hmd->views[eye].viewport.y_pixels = 0;
-		hmd->base.hmd->views[eye].viewport.w_pixels = panel_w;
-		hmd->base.hmd->views[eye].viewport.h_pixels = panel_h;
-		// if rotation is not identity, the dimensions can get more complex.
-		hmd->base.hmd->views[eye].rot = u_device_rotation_ident;
-	}
-	// left eye starts at x=0, right eye starts at x=panel_width
-	hmd->base.hmd->views[0].viewport.x_pixels = 0;
-	hmd->base.hmd->views[1].viewport.x_pixels = panel_w;
-
-	// Distortion information, fills in xdev->compute_distortion().
-	u_distortion_mesh_set_none(&hmd->base);
 
 	// Just put an initial identity value in the tracker
 	struct xrt_space_relation identity = XRT_SPACE_RELATION_ZERO;
