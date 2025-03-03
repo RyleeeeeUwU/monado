@@ -589,7 +589,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	hmd->base.hmd->screens[0].nominal_frame_interval_ns = time_s_to_ns(1.0f / 75.0f);
 
 	struct u_device_simple_info info;
-	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_LEFT;
+	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_RIGHT; // display is rotated, and we need to un-rotate then flip both ways
 	info.display.w_pixels = hmd->display_info.resolution_x;
 	info.display.h_pixels = hmd->display_info.resolution_y;
 	info.display.w_meters = MICROMETERS_TO_METERS(hmd->display_info.display_width);

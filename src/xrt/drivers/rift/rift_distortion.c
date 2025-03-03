@@ -395,7 +395,7 @@ rift_hmd_compute_distortion(struct xrt_device *dev, uint32_t view, float u, floa
 
 	struct rift_hmd *hmd = rift_hmd(dev);
 
-	struct xrt_vec2 source_ndc = {TO_NDC(u), TO_NDC(v)};
+	struct xrt_vec2 source_ndc = {-TO_NDC(u), -TO_NDC(v)}; // flip uv to fix views (the rotation we do produces wrong values)
 
 	struct rift_distortion_render_info distortion_render_info = rift_get_distortion_render_info(hmd, 0);
 
