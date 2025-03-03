@@ -275,6 +275,8 @@ struct rift_extra_display_info
 	float screen_gap_meters;
 	// the diameter of the lenses, may need to be extended to an array
 	float lens_diameter_meters;
+	// ipd of the headset
+	float icd;
 
 	// the fov of the headset
 	struct rift_viewport_fov_tan fov;

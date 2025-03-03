@@ -230,18 +230,15 @@ rift_hmd_get_view_poses(struct xrt_device *xdev,
                         struct xrt_fov *out_fovs,
                         struct xrt_pose *out_poses)
 {
-	/*
-	 * For HMDs you can call this function or directly set
-	 * the `get_view_poses` function on the device to it.
-	 */
-	u_device_get_view_poses(  //
-	    xdev,                 //
-	    default_eye_relation, //
-	    at_timestamp_ns,      //
-	    view_count,           //
-	    out_head_relation,    //
-	    out_fovs,             //
-	    out_poses);           //
+	struct rift_hmd *hmd = rift_hmd(xdev);
+
+	u_device_get_view_poses(xdev,                                                        //
+	                        &(struct xrt_vec3){hmd->extra_display_info.icd, 0.0f, 0.0f}, //
+	                        at_timestamp_ns,                                             //
+	                        view_count,                                                  //
+	                        out_head_relation,                                           //
+	                        out_fovs,                                                    //
+	                        out_poses);
 }
 
 static xrt_result_t
@@ -581,6 +578,8 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	info.lens_horizontal_separation_meters = MICROMETERS_TO_METERS(hmd->display_info.lens_separation);
 	info.lens_vertical_position_meters = MICROMETERS_TO_METERS(hmd->display_info.center_v);
 
+	hmd->extra_display_info.icd = info.lens_horizontal_separation_meters;
+
 	for (int i = 0; i < 2; i++) {
 		info.fov[i] = 93;
 	}
@@ -606,7 +605,6 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		break;
 	default: break;
 	}
-
 
 	// Just put an initial identity value in the tracker
 	struct xrt_space_relation identity = XRT_SPACE_RELATION_ZERO;
