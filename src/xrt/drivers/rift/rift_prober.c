@@ -1,9 +1,9 @@
-// Copyright 2020-2024, Collabora, Ltd.
+// Copyright 2025, Collabora, Ltd.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
- * @brief  "auto-prober" for Sample HMD that can be autodetected but not through USB VID/PID.
- * @author Jakob Bornecrantz <jakob@collabora.com>
+ * @brief  Prober for finding an Oculus Rift device based on USB VID/PID.
+ * @author Beyley Cardellio <ep1cm1n10n123@gmail.com>
  * @ingroup drv_rift
  */
 

@@ -2,13 +2,13 @@
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
- * @brief  Sample HMD device, use as a starting point to make your own device driver.
+ * @brief  Driver for the Oculus Rift.
  *
- *
- * Based largely on simulated_hmd.c
+ * Based largely on simulated_hmd.c, with reference to the DK1/DK2 firmware and OpenHMD's rift driver.
  *
  * @author Jakob Bornecrantz <jakob@collabora.com>
  * @author Rylie Pavlik <rylie.pavlik@collabora.com>
+ * @author Beyley Cardellio <ep1cm1n10n123@gmail.com>
  * @ingroup drv_rift
  */
 

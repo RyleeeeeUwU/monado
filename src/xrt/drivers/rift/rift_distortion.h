@@ -1,14 +1,9 @@
-// Copyright 2020-2025, Collabora, Ltd.
+// Copyright 2025, Collabora, Ltd.
 // SPDX-License-Identifier: BSL-1.0
 /*!
  * @file
- * @brief  Sample HMD device, use as a starting point to make your own device driver.
- *
- *
- * Based largely on simulated_hmd.c
- *
- * @author Jakob Bornecrantz <jakob@collabora.com>
- * @author Rylie Pavlik <rylie.pavlik@collabora.com>
+ * @brief  Public functions for the Oculus Rift distortion correction.
+ * @author Beyley Cardellio <ep1cm1n10n123@gmail.com>
  * @ingroup drv_rift
  */
 
