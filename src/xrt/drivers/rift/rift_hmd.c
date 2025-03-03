@@ -620,7 +620,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		goto error;
 	}
 
-	m_imu_3dof_init(&hmd->fusion, 0);
+	m_imu_3dof_init(&hmd->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_300MS);
 
 	result = os_thread_helper_start(&hmd->sensor_thread, sensor_thread, hmd);
 
