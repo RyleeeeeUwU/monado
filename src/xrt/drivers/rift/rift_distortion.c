@@ -108,11 +108,11 @@ rift_get_distortion_render_info(struct rift_hmd *hmd, uint32_t view)
 {
 	struct rift_lens_distortion *distortion = &hmd->lens_distortions[hmd->distortion_in_use];
 
-	float display_width_meters = (float)hmd->display_info.display_width / 1000000.0f;
-	float display_height_meters = (float)hmd->display_info.display_height / 1000000.0f;
+	float display_width_meters = MICROMETERS_TO_METERS(hmd->display_info.display_width);
+	float display_height_meters = MICROMETERS_TO_METERS(hmd->display_info.display_height);
 
-	float lens_separation_meters = (float)hmd->display_info.lens_separation / 1000000.0f;
-	float center_from_top_meters = (float)hmd->display_info.center_v / 1000000.0f;
+	float lens_separation_meters = MICROMETERS_TO_METERS(hmd->display_info.lens_separation);
+	float center_from_top_meters = MICROMETERS_TO_METERS(hmd->display_info.center_v);
 
 	struct xrt_vec2 pixels_per_meter;
 	pixels_per_meter.x =
@@ -404,10 +404,17 @@ rift_hmd_compute_distortion(struct xrt_device *dev, uint32_t view, float u, floa
 	struct xrt_uv_triplet tan_fov_chroma =
 	    rift_transform_screen_ndc_to_tan_fov_space_chroma(&distortion_render_info, source_ndc);
 
+#if 0 // no distortion
+	struct xrt_uv_triplet sample_tex_coord = {
+	    .r = m_vec2_add(m_vec2_mul(tan_fov_chroma.g, eye_to_source_uv->scale), eye_to_source_uv->offset),
+	    .g = m_vec2_add(m_vec2_mul(tan_fov_chroma.g, eye_to_source_uv->scale), eye_to_source_uv->offset),
+	    .b = m_vec2_add(m_vec2_mul(tan_fov_chroma.g, eye_to_source_uv->scale), eye_to_source_uv->offset)};
+#else
 	struct xrt_uv_triplet sample_tex_coord = {
 	    .r = m_vec2_add(m_vec2_mul(tan_fov_chroma.r, eye_to_source_uv->scale), eye_to_source_uv->offset),
 	    .g = m_vec2_add(m_vec2_mul(tan_fov_chroma.g, eye_to_source_uv->scale), eye_to_source_uv->offset),
 	    .b = m_vec2_add(m_vec2_mul(tan_fov_chroma.b, eye_to_source_uv->scale), eye_to_source_uv->offset)};
+#endif
 
 	*out_result = sample_tex_coord;
 

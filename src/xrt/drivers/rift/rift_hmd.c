@@ -274,7 +274,7 @@ rift_parse_distortion_report(struct rift_lens_distortion_report *report, struct 
 		struct rift_catmull_rom_distortion_report_data report_data = report->data.lcsv_catmull_rom_10;
 		struct rift_catmull_rom_distortion_data data;
 
-		out->eye_relief = (float)report_data.eye_relief / 1000000.0f;
+		out->eye_relief = MICROMETERS_TO_METERS(report_data.eye_relief);
 
 		for (uint16_t i = 0; i < CATMULL_COEFFICIENTS; i += 1) {
 			data.k[i] = rift_decode_fixed_point_uint16(report_data.k[i], 0, 14);
@@ -549,6 +549,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	hmd->base.destroy = rift_hmd_destroy;
 
 	hmd->base.compute_distortion = rift_hmd_compute_distortion;
+	// u_distortion_mesh_set_none(&hmd->base);
 
 	hmd->pose = (struct xrt_pose)XRT_POSE_IDENTITY;
 	hmd->log_level = debug_get_log_option_rift_log();
@@ -574,23 +575,38 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_LEFT;
 	info.display.w_pixels = hmd->display_info.resolution_x;
 	info.display.h_pixels = hmd->display_info.resolution_y;
-	info.display.w_meters = (float)hmd->display_info.display_width / 1000000.0f; // micrometers -> meters
-	info.display.h_meters = (float)hmd->display_info.display_height / 1000000.0f;
+	info.display.w_meters = MICROMETERS_TO_METERS(hmd->display_info.display_width);
+	info.display.h_meters = MICROMETERS_TO_METERS(hmd->display_info.display_height);
 
-	info.lens_horizontal_separation_meters = (float)hmd->display_info.lens_separation / 1000000.0f;
+	info.lens_horizontal_separation_meters = MICROMETERS_TO_METERS(hmd->display_info.lens_separation);
+	info.lens_vertical_position_meters = MICROMETERS_TO_METERS(hmd->display_info.center_v);
 
-	// TODO: this is per eye on the headset, but we're just taking the left eye for this, we should be using both
-	// eyes, ideally
-	info.lens_vertical_position_meters = (float)hmd->display_info.lens_distance_l / 1000000.0f;
-
-	// TODO: calculate this
-	info.fov[0] = (float)(93.0 * (M_PI / 180.0));
-	info.fov[1] = (float)(99.0 * (M_PI / 180.0));
+	for (int i = 0; i < 2; i++) {
+		info.fov[i] = 93;
+	}
 
 	if (!u_device_setup_split_side_by_side(&hmd->base, &info)) {
 		HMD_ERROR(hmd, "Failed to setup basic device info");
 		goto error;
 	}
+
+	switch (hmd->variant) {
+	case RIFT_VARIANT_DK2:
+		// TODO: figure out how to calculate this programatically, right now this is hardcoded with data dumped
+		//       from oculus' OpenXR runtime
+		hmd->base.hmd->distortion.fov[0].angle_up = 0.92667186;
+		hmd->base.hmd->distortion.fov[0].angle_down = -0.92667186;
+		hmd->base.hmd->distortion.fov[0].angle_left = -0.8138836;
+		hmd->base.hmd->distortion.fov[0].angle_right = 0.82951474;
+
+		hmd->base.hmd->distortion.fov[1].angle_up = 0.92667186;
+		hmd->base.hmd->distortion.fov[1].angle_down = -0.92667186;
+		hmd->base.hmd->distortion.fov[1].angle_left = -0.82951474;
+		hmd->base.hmd->distortion.fov[1].angle_right = 0.8138836;
+		break;
+	default: break;
+	}
+
 
 	// Just put an initial identity value in the tracker
 	struct xrt_space_relation identity = XRT_SPACE_RELATION_ZERO;
@@ -618,6 +634,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	// Setup variable tracker: Optional but useful for debugging
 	u_var_add_root(hmd, "Rift HMD", true);
 	u_var_add_log_level(hmd, &hmd->log_level, "log_level");
+	m_imu_3dof_add_vars(&hmd->fusion, hmd, "3dof_");
 
 	return hmd;
 error:

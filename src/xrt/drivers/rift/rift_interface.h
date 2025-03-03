@@ -38,6 +38,7 @@ extern "C" {
 #define IMU_SAMPLE_RATE 1000
 
 #define DEG_TO_RAD(DEG) (DEG * M_PI / 180.0)
+#define MICROMETERS_TO_METERS(microns) (float)microns / 1000000.0f
 
 // value taken from LibOVR 0.4.4
 #define DEFAULT_EXTRA_EYE_ROTATION DEG_TO_RAD(30.0f)
@@ -156,8 +157,7 @@ struct rift_display_info_report
 	uint32_t center_v;
 	// the separation between the two lenses, in micrometers
 	uint32_t lens_separation;
-	uint32_t lens_distance_l;
-	uint32_t lens_distance_r;
+	uint32_t lens_distance[2];
 	float distortion[6];
 } RIFT_PACKED;
 
