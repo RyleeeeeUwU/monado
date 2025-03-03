@@ -300,7 +300,7 @@ rift_parse_distortion_report(struct rift_lens_distortion_report *report, struct 
  * We unpack them in the higher 21 bit values first and then shift
  * them down to the lower in order to get the sign bits correct.
  *
- * "Inspired" (code copied verbatim) from OpenHMD's rift driver
+ * Code taken/reformated from OpenHMD's rift driver
  */
 static void
 rift_decode_sample(const uint8_t *in, int32_t *out)
@@ -372,11 +372,20 @@ sensor_thread_tick(struct rift_hmd *hmd)
 
 		int64_t remote_sample_timestamp_ns = (int64_t)report.sample_timestamp * 1000;
 
-		m_clock_windowed_skew_tracker_push(hmd->clock_tracker, os_monotonic_get_ns(), remote_sample_timestamp_ns);
+		// ignore samples that are behind the latest current sample
+		if (remote_sample_timestamp_ns < hmd->last_sample_time_ns) {
+			return 0;
+		}
+
+		hmd->last_sample_time_ns = remote_sample_timestamp_ns;
+
+		m_clock_windowed_skew_tracker_push(hmd->clock_tracker, os_monotonic_get_ns(),
+		                                   remote_sample_timestamp_ns);
 
 		int64_t local_timestamp_ns;
 		// if we havent synchronized our clocks, just do nothing
-		if(!m_clock_windowed_skew_tracker_to_local(hmd->clock_tracker, remote_sample_timestamp_ns, &local_timestamp_ns)) {
+		if (!m_clock_windowed_skew_tracker_to_local(hmd->clock_tracker, remote_sample_timestamp_ns,
+		                                            &local_timestamp_ns)) {
 			return 0;
 		}
 
@@ -390,7 +399,6 @@ sensor_thread_tick(struct rift_hmd *hmd)
 		rift_sample_to_imu_space(accel_raw, &accel);
 		rift_sample_to_imu_space(gyro_raw, &gyro);
 
-		HMD_INFO(hmd, "sample timestamp: %ld", remote_sample_timestamp_ns);
 		m_imu_3dof_update(&hmd->fusion, local_timestamp_ns, &accel, &gyro);
 
 		struct xrt_space_relation relation = XRT_SPACE_RELATION_ZERO;
@@ -592,13 +600,13 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 
 	hmd->extra_display_info.icd = info.lens_horizontal_separation_meters;
 
-	char * icd_str = getenv("RIFT_OVERRIDE_ICD");
-	if(icd_str != NULL) {
+	char *icd_str = getenv("RIFT_OVERRIDE_ICD");
+	if (icd_str != NULL) {
 		// mm -> meters
 		float icd = strtof(icd_str, NULL) / 1000.0f;
 
 		// 0 is error, and less than zero is invalid
-		if(icd > 0.0f) {
+		if (icd > 0.0f) {
 			hmd->extra_display_info.icd = icd;
 			HMD_INFO(hmd, "Forcing ICD to %f", hmd->extra_display_info.icd);
 		} else {
@@ -606,9 +614,9 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		}
 	}
 
-	for (int i = 0; i < 2; i++) {
-		info.fov[i] = 93;
-	}
+	// hardcode some "okay" values
+	info.fov[0] = 93;
+	info.fov[1] = 93;
 
 	if (!u_device_setup_split_side_by_side(&hmd->base, &info)) {
 		HMD_ERROR(hmd, "Failed to setup basic device info");
