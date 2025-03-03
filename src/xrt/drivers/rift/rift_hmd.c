@@ -592,6 +592,20 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 
 	hmd->extra_display_info.icd = info.lens_horizontal_separation_meters;
 
+	char * icd_str = getenv("RIFT_OVERRIDE_ICD");
+	if(icd_str != NULL) {
+		// mm -> meters
+		float icd = strtof(icd_str, NULL) / 1000.0f;
+
+		// 0 is error, and less than zero is invalid
+		if(icd > 0.0f) {
+			hmd->extra_display_info.icd = icd;
+			HMD_INFO(hmd, "Forcing ICD to %f", hmd->extra_display_info.icd);
+		} else {
+			HMD_ERROR(hmd, "Failed to parse ICD override, expected float in millimeters, got %s", icd_str);
+		}
+	}
+
 	for (int i = 0; i < 2; i++) {
 		info.fov[i] = 93;
 	}
