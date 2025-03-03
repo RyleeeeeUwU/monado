@@ -327,7 +327,9 @@ struct rift_hmd
 
 	struct os_hid_device *hid_dev;
 	struct os_thread_helper sensor_thread;
+
 	struct m_imu_3dof fusion;
+	struct m_clock_windowed_skew_tracker *clock_tracker;
 
 	int64_t last_keepalive_time;
 	enum rift_variant variant;
