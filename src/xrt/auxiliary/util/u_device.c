@@ -161,7 +161,6 @@ u_extents_2d_split_side_by_side(struct xrt_device *xdev, const struct u_extents_
 bool
 u_device_setup_one_eye(struct xrt_device *xdev, const struct u_device_simple_info *info)
 {
-	// unrotated width/height
 	uint32_t w_pixels = info->display.w_pixels;
 	uint32_t h_pixels = info->display.h_pixels;
 	float w_meters = info->display.w_meters;
@@ -180,30 +179,17 @@ u_device_setup_one_eye(struct xrt_device *xdev, const struct u_device_simple_inf
 		xdev->hmd->distortion.models = XRT_DISTORTION_MODEL_NONE;
 		xdev->hmd->distortion.preferred = XRT_DISTORTION_MODEL_NONE;
 	}
+	xdev->hmd->screens[0].w_pixels = info->display.w_pixels;
+	xdev->hmd->screens[0].h_pixels = info->display.h_pixels;
 
-	switch (info->display.rotation_quirk) {
-	case DISPLAY_ROTATION_QUIRK_LEFT:
-	case DISPLAY_ROTATION_QUIRK_RIGHT:
-		xdev->hmd->screens[0].w_pixels = info->display.h_pixels;
-		xdev->hmd->screens[0].h_pixels = info->display.w_pixels;
-		xdev->hmd->views[0].viewport.w_pixels = h_pixels;
-		xdev->hmd->views[0].viewport.h_pixels = w_pixels;
-		break;
-	default:
-		xdev->hmd->screens[0].w_pixels = info->display.w_pixels;
-		xdev->hmd->screens[0].h_pixels = info->display.h_pixels;
-		xdev->hmd->views[0].viewport.w_pixels = w_pixels;
-		xdev->hmd->views[0].viewport.h_pixels = h_pixels;
-		break;
-	}
-
-	switch (info->display.rotation_quirk) {
-	case DISPLAY_ROTATION_QUIRK_LEFT: xdev->hmd->views[0].rot = u_device_rotation_left; break;
-	case DISPLAY_ROTATION_QUIRK_RIGHT: xdev->hmd->views[0].rot = u_device_rotation_right; break;
-	case DISPLAY_ROTATION_QUIRK_180: xdev->hmd->views[0].rot = u_device_rotation_180; break;
-	case DISPLAY_ROTATION_QUIRK_NONE:
-	default: xdev->hmd->views[0].rot = u_device_rotation_ident; break;
-	}
+	// Left
+	xdev->hmd->views[0].display.w_pixels = w_pixels;
+	xdev->hmd->views[0].display.h_pixels = h_pixels;
+	xdev->hmd->views[0].viewport.x_pixels = 0;
+	xdev->hmd->views[0].viewport.y_pixels = 0;
+	xdev->hmd->views[0].viewport.w_pixels = w_pixels;
+	xdev->hmd->views[0].viewport.h_pixels = h_pixels;
+	xdev->hmd->views[0].rot = u_device_rotation_ident;
 
 	{
 		/* left eye */
@@ -226,7 +212,6 @@ u_device_setup_split_side_by_side(struct xrt_device *xdev, const struct u_device
 
 	uint32_t view_count = xdev->hmd->view_count;
 
-	// unrotated width/height
 	uint32_t w_pixels = info->display.w_pixels / view_count;
 	uint32_t h_pixels = info->display.h_pixels;
 	float w_meters = info->display.w_meters / view_count;
@@ -251,54 +236,18 @@ u_device_setup_split_side_by_side(struct xrt_device *xdev, const struct u_device
 		xdev->hmd->distortion.models = XRT_DISTORTION_MODEL_NONE;
 		xdev->hmd->distortion.preferred = XRT_DISTORTION_MODEL_NONE;
 	}
+	xdev->hmd->screens[0].w_pixels = info->display.w_pixels;
+	xdev->hmd->screens[0].h_pixels = info->display.h_pixels;
 
-	switch (info->display.rotation_quirk) {
-	case DISPLAY_ROTATION_QUIRK_LEFT:
-	case DISPLAY_ROTATION_QUIRK_RIGHT:
-		xdev->hmd->screens[0].w_pixels = info->display.h_pixels;
-		xdev->hmd->screens[0].h_pixels = info->display.w_pixels;
-		break;
-	default:
-		xdev->hmd->screens[0].w_pixels = info->display.w_pixels;
-		xdev->hmd->screens[0].h_pixels = info->display.h_pixels;
-		break;
-	}
-
+	// Left
 	for (uint32_t i = 0; i < view_count; ++i) {
 		xdev->hmd->views[i].display.w_pixels = w_pixels;
 		xdev->hmd->views[i].display.h_pixels = h_pixels;
-
-		switch (info->display.rotation_quirk) {
-		case DISPLAY_ROTATION_QUIRK_LEFT:
-			xdev->hmd->views[i].viewport.x_pixels = 0;
-			xdev->hmd->views[i].viewport.y_pixels = w_pixels * i;
-			xdev->hmd->views[i].viewport.w_pixels = h_pixels;
-			xdev->hmd->views[i].viewport.h_pixels = w_pixels;
-			xdev->hmd->views[i].rot = u_device_rotation_left;
-			break;
-		case DISPLAY_ROTATION_QUIRK_RIGHT:
-			xdev->hmd->views[i].viewport.x_pixels = 0;
-			xdev->hmd->views[i].viewport.y_pixels = info->display.w_pixels - (w_pixels * (i + 1));
-			xdev->hmd->views[i].viewport.w_pixels = h_pixels;
-			xdev->hmd->views[i].viewport.h_pixels = w_pixels;
-			xdev->hmd->views[i].rot = u_device_rotation_right;
-			break;
-		case DISPLAY_ROTATION_QUIRK_180:
-			xdev->hmd->views[i].viewport.x_pixels = info->display.w_pixels - (w_pixels * (i + 1));
-			xdev->hmd->views[i].viewport.y_pixels = 0;
-			xdev->hmd->views[i].viewport.w_pixels = w_pixels;
-			xdev->hmd->views[i].viewport.h_pixels = h_pixels;
-			xdev->hmd->views[i].rot = u_device_rotation_180;
-			break;
-		case DISPLAY_ROTATION_QUIRK_NONE:
-		default:
-			xdev->hmd->views[i].viewport.x_pixels = w_pixels * i;
-			xdev->hmd->views[i].viewport.y_pixels = 0;
-			xdev->hmd->views[i].viewport.w_pixels = w_pixels;
-			xdev->hmd->views[i].viewport.h_pixels = h_pixels;
-			xdev->hmd->views[i].rot = u_device_rotation_ident;
-			break;
-		}
+		xdev->hmd->views[i].viewport.x_pixels = w_pixels * i;
+		xdev->hmd->views[i].viewport.y_pixels = 0;
+		xdev->hmd->views[i].viewport.w_pixels = w_pixels;
+		xdev->hmd->views[i].viewport.h_pixels = h_pixels;
+		xdev->hmd->views[i].rot = u_device_rotation_ident;
 	}
 
 	{

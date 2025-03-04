@@ -180,7 +180,6 @@ illixr_hmd_create(const char *path_in, const char *comp_in)
 
 	// Setup info.
 	struct u_device_simple_info info;
-	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_NONE;
 	info.display.w_pixels = 2048;
 	info.display.h_pixels = 1024;
 	info.display.w_meters = 0.14f;
