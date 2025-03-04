@@ -466,7 +466,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		HMD_ERROR(hmd, "Failed to get device config, reason %d", result);
 		goto error;
 	}
-	HMD_INFO(hmd, "Got display info from hmd, res: %dx%d", hmd->display_info.resolution_x,
+	HMD_DEBUG(hmd, "Got display info from hmd, res: %dx%d", hmd->display_info.resolution_x,
 	         hmd->display_info.resolution_y);
 
 	result = rift_get_config(hmd, &hmd->config);
@@ -474,11 +474,14 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		HMD_ERROR(hmd, "Failed to get device config, reason %d", result);
 		goto error;
 	}
-	HMD_INFO(hmd, "Got config from hmd, config flags: %X", hmd->config.config_flags);
+	HMD_DEBUG(hmd, "Got config from hmd, config flags: %X", hmd->config.config_flags);
 
 	if (getenv("RIFT_POWER_OVERRIDE") != NULL) {
 		hmd->config.config_flags |= RIFT_CONFIG_REPORT_OVERRIDE_POWER;
-		HMD_INFO(hmd, "Force-enabling the override power config flag.");
+		HMD_INFO(hmd, "Enabling the override power config flag.");
+	} else {
+		hmd->config.config_flags &= ~RIFT_CONFIG_REPORT_OVERRIDE_POWER;
+		HMD_DEBUG(hmd, "Disabling the override power config flag.");
 	}
 
 	// force enable calibration use and auto calibration
@@ -502,7 +505,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		HMD_ERROR(hmd, "Failed to set the device config, reason %d", result);
 		goto error;
 	}
-	HMD_INFO(hmd, "After writing, HMD has config flags: %X", hmd->config.config_flags);
+	HMD_DEBUG(hmd, "After writing, HMD has config flags: %X", hmd->config.config_flags);
 
 	if (getenv("RIFT_USE_FIRMWARE_DISTORTION") != NULL) {
 		// get the lens distortions
@@ -603,6 +606,8 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		} else {
 			HMD_ERROR(hmd, "Failed to parse ICD override, expected float in millimeters, got %s", icd_str);
 		}
+	} else {
+		HMD_DEBUG(hmd, "Using default ICD of %f", hmd->extra_display_info.icd);
 	}
 
 	// screen is rotated, so we need to undo that here
