@@ -554,7 +554,6 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	hmd->extra_display_info.eye_to_source_uv =
 	    rift_calculate_uv_scale_and_offset_from_ndc_scale_and_offset(hmd->extra_display_info.eye_to_source_ndc);
 
-	// This list should be ordered, most preferred first.
 	size_t idx = 0;
 	hmd->base.hmd->blend_modes[idx++] = XRT_BLEND_MODE_OPAQUE;
 	hmd->base.hmd->blend_mode_count = idx;
@@ -565,7 +564,10 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	hmd->base.get_visibility_mask = rift_hmd_get_visibility_mask;
 	hmd->base.destroy = rift_hmd_destroy;
 
+	hmd->base.hmd->distortion.models = XRT_DISTORTION_MODEL_COMPUTE;
+	hmd->base.hmd->distortion.preferred = XRT_DISTORTION_MODEL_COMPUTE;
 	hmd->base.compute_distortion = rift_hmd_compute_distortion;
+	u_distortion_mesh_fill_in_compute(&hmd->base);
 	// u_distortion_mesh_set_none(&hmd->base);
 
 	hmd->pose = (struct xrt_pose)XRT_POSE_IDENTITY;
@@ -582,23 +584,12 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	hmd->base.device_type = XRT_DEVICE_TYPE_HMD;
 	hmd->base.inputs[0].name = XRT_INPUT_GENERIC_HEAD_POSE;
 	hmd->base.orientation_tracking_supported = true;
-	hmd->base.position_tracking_supported = false;
+	hmd->base.position_tracking_supported = false; // set to true once we are trying to get the sensor 6dof to work
 
 	// Set up display details
-	// refresh rate
 	hmd->base.hmd->screens[0].nominal_frame_interval_ns = time_s_to_ns(1.0f / 75.0f);
 
-	struct u_device_simple_info info;
-	info.display.rotation_quirk = DISPLAY_ROTATION_QUIRK_RIGHT; // display is rotated, and we need to un-rotate then flip both ways
-	info.display.w_pixels = hmd->display_info.resolution_x;
-	info.display.h_pixels = hmd->display_info.resolution_y;
-	info.display.w_meters = MICROMETERS_TO_METERS(hmd->display_info.display_width);
-	info.display.h_meters = MICROMETERS_TO_METERS(hmd->display_info.display_height);
-
-	info.lens_horizontal_separation_meters = MICROMETERS_TO_METERS(hmd->display_info.lens_separation);
-	info.lens_vertical_position_meters = MICROMETERS_TO_METERS(hmd->display_info.center_v);
-
-	hmd->extra_display_info.icd = info.lens_horizontal_separation_meters;
+	hmd->extra_display_info.icd = MICROMETERS_TO_METERS(hmd->display_info.lens_separation);
 
 	char *icd_str = getenv("RIFT_OVERRIDE_ICD");
 	if (icd_str != NULL) {
@@ -614,19 +605,32 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		}
 	}
 
-	// hardcode some "okay" values
-	info.fov[0] = 93;
-	info.fov[1] = 93;
+	// screen is rotated, so we need to undo that here
+	hmd->base.hmd->screens[0].h_pixels = hmd->display_info.resolution_x;
+	hmd->base.hmd->screens[0].w_pixels = hmd->display_info.resolution_y;
 
-	if (!u_device_setup_split_side_by_side(&hmd->base, &info)) {
-		HMD_ERROR(hmd, "Failed to setup basic device info");
-		goto error;
+	// TODO: properly apply using rift_extra_display_info.screen_gap_meters, but this isn't necessary on DK2, where
+	// the gap is always 0
+	uint16_t view_width = hmd->display_info.resolution_x / 2;
+	uint16_t view_height = hmd->display_info.resolution_y;
+
+	for (uint32_t i = 0; i < 2; ++i) {
+		hmd->base.hmd->views[i].display.w_pixels = view_width;
+		hmd->base.hmd->views[i].display.h_pixels = view_height;
+
+		hmd->base.hmd->views[i].viewport.x_pixels = 0;
+		hmd->base.hmd->views[i].viewport.y_pixels = i * (hmd->display_info.resolution_x / 2);
+		hmd->base.hmd->views[i].viewport.w_pixels = view_height; // screen is rotated, so swap w and h
+		hmd->base.hmd->views[i].viewport.h_pixels = view_width;
+		hmd->base.hmd->views[i].rot = u_device_rotation_left;
 	}
 
 	switch (hmd->variant) {
+	default:
 	case RIFT_VARIANT_DK2:
 		// TODO: figure out how to calculate this programatically, right now this is hardcoded with data dumped
-		//       from oculus' OpenXR runtime
+		//       from oculus' OpenXR runtime, some of the math for this is in rift_distortion.c, used for
+		//       calculating distortion
 		hmd->base.hmd->distortion.fov[0].angle_up = 0.92667186;
 		hmd->base.hmd->distortion.fov[0].angle_down = -0.92667186;
 		hmd->base.hmd->distortion.fov[0].angle_left = -0.8138836;
@@ -637,7 +641,6 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		hmd->base.hmd->distortion.fov[1].angle_left = -0.82951474;
 		hmd->base.hmd->distortion.fov[1].angle_right = 0.8138836;
 		break;
-	default: break;
 	}
 
 	// Just put an initial identity value in the tracker
