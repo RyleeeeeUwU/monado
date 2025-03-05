@@ -624,7 +624,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		hmd->base.hmd->views[i].display.h_pixels = view_height;
 
 		hmd->base.hmd->views[i].viewport.x_pixels = 0;
-		hmd->base.hmd->views[i].viewport.y_pixels = i * (hmd->display_info.resolution_x / 2);
+		hmd->base.hmd->views[i].viewport.y_pixels = (1 - i) * (hmd->display_info.resolution_x / 2);
 		hmd->base.hmd->views[i].viewport.w_pixels = view_height; // screen is rotated, so swap w and h
 		hmd->base.hmd->views[i].viewport.h_pixels = view_width;
 		hmd->base.hmd->views[i].rot = u_device_rotation_left;
