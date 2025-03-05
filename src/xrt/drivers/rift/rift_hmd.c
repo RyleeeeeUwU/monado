@@ -300,7 +300,7 @@ rift_parse_distortion_report(struct rift_lens_distortion_report *report, struct 
  * We unpack them in the higher 21 bit values first and then shift
  * them down to the lower in order to get the sign bits correct.
  *
- * Code taken/reformated from OpenHMD's rift driver
+ * Code taken/reformatted from OpenHMD's rift driver
  */
 static void
 rift_decode_sample(const uint8_t *in, int32_t *out)
@@ -383,7 +383,7 @@ sensor_thread_tick(struct rift_hmd *hmd)
 		                                   remote_sample_timestamp_ns);
 
 		int64_t local_timestamp_ns;
-		// if we havent synchronized our clocks, just do nothing
+		// if we haven't synchronized our clocks, just do nothing
 		if (!m_clock_windowed_skew_tracker_to_local(hmd->clock_tracker, remote_sample_timestamp_ns,
 		                                            &local_timestamp_ns)) {
 			return 0;
@@ -467,7 +467,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		goto error;
 	}
 	HMD_DEBUG(hmd, "Got display info from hmd, res: %dx%d", hmd->display_info.resolution_x,
-	         hmd->display_info.resolution_y);
+	          hmd->display_info.resolution_y);
 
 	result = rift_get_config(hmd, &hmd->config);
 	if (result < 0) {
@@ -633,7 +633,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	switch (hmd->variant) {
 	default:
 	case RIFT_VARIANT_DK2:
-		// TODO: figure out how to calculate this programatically, right now this is hardcoded with data dumped
+		// TODO: figure out how to calculate this programmatically, right now this is hardcoded with data dumped
 		//       from oculus' OpenXR runtime, some of the math for this is in rift_distortion.c, used for
 		//       calculating distortion
 		hmd->base.hmd->distortion.fov[0].angle_up = 0.92667186;
