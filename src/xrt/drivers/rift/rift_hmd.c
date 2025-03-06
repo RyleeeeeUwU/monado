@@ -347,7 +347,7 @@ sensor_thread_tick(struct rift_hmd *hmd)
 	}
 
 	if (result == 0) {
-		HMD_WARN(hmd, "Timed out waiting for packet from headset, packet should come in every %d milliseconds",
+		HMD_WARN(hmd, "Timed out waiting for packet from headset, packets should come in at %dhz",
 		         IMU_SAMPLE_RATE);
 		return 0;
 	}
@@ -361,8 +361,14 @@ sensor_thread_tick(struct rift_hmd *hmd)
 		}
 
 		struct dk2_in_report report;
-		assert(result >= (int)sizeof(report));
 
+		// don't treat invalid IN reports as fatal, just ignore them
+		if(result < (int)sizeof(report)) {
+			HMD_WARN(hmd, "Got malformed DK2 IN report with size %d", result);
+			return 0;
+		}
+
+		// TODO: handle endianness
 		memcpy(&report, buf + 1, sizeof(report));
 
 		// if there's no samples, just do nothing.
@@ -370,30 +376,31 @@ sensor_thread_tick(struct rift_hmd *hmd)
 			return 0;
 		}
 
-		int64_t remote_sample_timestamp_ns = (int64_t)report.sample_timestamp * 1000;
-
-		// ignore samples that are behind the latest current sample
-		if (remote_sample_timestamp_ns < hmd->last_sample_time_ns) {
-			return 0;
+		if(!hmd->processed_sample_packet) {
+			hmd->last_remote_sample_time_us = report.sample_timestamp;
+			hmd->processed_sample_packet = true;
 		}
 
-		hmd->last_sample_time_ns = remote_sample_timestamp_ns;
+		// wrap-around intentional and A-OK, given these are unsigned
+		uint32_t remote_sample_delta_us = report.sample_timestamp - hmd->last_remote_sample_time_us;
 
-		m_clock_windowed_skew_tracker_push(hmd->clock_tracker, os_monotonic_get_ns(),
-		                                   remote_sample_timestamp_ns);
+		hmd->last_remote_sample_time_us = report.sample_timestamp;
+
+		hmd->last_remote_sample_time_ns += (int64_t)remote_sample_delta_us * OS_NS_PER_USEC;
+
+		m_clock_windowed_skew_tracker_push(hmd->clock_tracker, os_monotonic_get_ns(),		hmd->last_remote_sample_time_ns);
 
 		int64_t local_timestamp_ns;
 		// if we haven't synchronized our clocks, just do nothing
-		if (!m_clock_windowed_skew_tracker_to_local(hmd->clock_tracker, remote_sample_timestamp_ns,
-		                                            &local_timestamp_ns)) {
+		if (!m_clock_windowed_skew_tracker_to_local(hmd->clock_tracker, hmd->last_remote_sample_time_ns, &local_timestamp_ns)) {
 			return 0;
 		}
 
-		struct dk2_sample_pack sample_pack = report.samples[report.num_samples >= 2 ? 1 : 0];
+		struct dk2_sample_pack latest_sample_pack = report.samples[report.num_samples >= 2 ? 1 : 0];
 
 		int32_t accel_raw[3], gyro_raw[3];
-		rift_decode_sample(sample_pack.accel.data, accel_raw);
-		rift_decode_sample(sample_pack.gyro.data, gyro_raw);
+		rift_decode_sample(latest_sample_pack.accel.data, accel_raw);
+		rift_decode_sample(latest_sample_pack.gyro.data, gyro_raw);
 
 		struct xrt_vec3 accel, gyro;
 		rift_sample_to_imu_space(accel_raw, &accel);

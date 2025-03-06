@@ -382,7 +382,9 @@ struct rift_hmd
 
 	struct os_hid_device *hid_dev;
 	struct os_thread_helper sensor_thread;
-	int64_t last_sample_time_ns;
+	bool processed_sample_packet;
+	uint32_t last_remote_sample_time_us;
+	int64_t last_remote_sample_time_ns;
 
 	struct m_imu_3dof fusion;
 	struct m_clock_windowed_skew_tracker *clock_tracker;
