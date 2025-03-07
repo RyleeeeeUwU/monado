@@ -32,10 +32,10 @@ extern "C" {
 
 #define REPORT_MAX_SIZE 69                // max size of a feature report (FEATURE_REPORT_CALIBRATE)
 #define KEEPALIVE_INTERVAL_NS 10000000000 // 10 seconds
-#define KEEPALIVE_SEND_RATE_NS                                                                                         \
-	(KEEPALIVE_INTERVAL_NS * 19) /                                                                                 \
-	    20 // give a 5% breathing room (at 10 seconds, this is 500 milliseconds of breathing room)
-#define IMU_SAMPLE_RATE 1000
+// give a 5% breathing room (at 10 seconds, this is 500 milliseconds of breathing room)
+#define KEEPALIVE_SEND_RATE_NS ((KEEPALIVE_INTERVAL_NS * 19) / 20)
+#define IMU_SAMPLE_RATE (1000)      // 1000hz
+#define NS_PER_SAMPLE (1000 * 1000) // 1ms (1,000,000 ns) per sample
 
 #define DEG_TO_RAD(DEG) (DEG * M_PI / 180.0)
 #define MICROMETERS_TO_METERS(microns) (float)microns / 1000000.0f
@@ -266,6 +266,7 @@ struct dk2_sample_pack
 	struct dk2_sensor_sample gyro;
 } RIFT_PACKED;
 
+#define DK2_MAX_SAMPLES 2
 struct dk2_in_report
 {
 	uint16_t command_id;
@@ -273,7 +274,7 @@ struct dk2_in_report
 	uint16_t sample_count;
 	uint16_t temperature;
 	uint32_t sample_timestamp;
-	struct dk2_sample_pack samples[2];
+	struct dk2_sample_pack samples[DK2_MAX_SAMPLES];
 	int16_t mag_x;
 	int16_t mag_y;
 	int16_t mag_z;
