@@ -363,7 +363,7 @@ sensor_thread_tick(struct rift_hmd *hmd)
 		struct dk2_in_report report;
 
 		// don't treat invalid IN reports as fatal, just ignore them
-		if(result < (int)sizeof(report)) {
+		if (result < (int)sizeof(report)) {
 			HMD_WARN(hmd, "Got malformed DK2 IN report with size %d", result);
 			return 0;
 		}
@@ -376,7 +376,7 @@ sensor_thread_tick(struct rift_hmd *hmd)
 			return 0;
 		}
 
-		if(!hmd->processed_sample_packet) {
+		if (!hmd->processed_sample_packet) {
 			hmd->last_remote_sample_time_us = report.sample_timestamp;
 			hmd->processed_sample_packet = true;
 		}
@@ -388,11 +388,13 @@ sensor_thread_tick(struct rift_hmd *hmd)
 
 		hmd->last_remote_sample_time_ns += (int64_t)remote_sample_delta_us * OS_NS_PER_USEC;
 
-		m_clock_windowed_skew_tracker_push(hmd->clock_tracker, os_monotonic_get_ns(),		hmd->last_remote_sample_time_ns);
+		m_clock_windowed_skew_tracker_push(hmd->clock_tracker, os_monotonic_get_ns(),
+		                                   hmd->last_remote_sample_time_ns);
 
 		int64_t local_timestamp_ns;
 		// if we haven't synchronized our clocks, just do nothing
-		if (!m_clock_windowed_skew_tracker_to_local(hmd->clock_tracker, hmd->last_remote_sample_time_ns, &local_timestamp_ns)) {
+		if (!m_clock_windowed_skew_tracker_to_local(hmd->clock_tracker, hmd->last_remote_sample_time_ns,
+		                                            &local_timestamp_ns)) {
 			return 0;
 		}
 
