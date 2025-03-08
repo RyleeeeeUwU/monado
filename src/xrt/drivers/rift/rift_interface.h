@@ -235,6 +235,26 @@ struct rift_position_calibration_report
 	uint16_t position_type;
 } RIFT_PACKED;
 
+enum rift_custom_pattern_state
+{
+	RIFT_CUSTOM_PATTERN_STAT_OFF = 0,
+	RIFT_CUSTOM_PATTERN_STAT_LOW = 1,
+	RIFT_CUSTOM_PATTERN_STAT_HIGH = 3,
+};
+
+struct rift_custom_pattern_report
+{
+	uint16_t command_id;
+	// the length of the sequence that each LED goes through
+	uint8_t sequence_length;
+	// the sequence the specific LED goes through, 2 bits per state, 0 (off), 1 (low), and 3 (high), ordered from LSB to MSB
+	uint32_t sequence;
+	// the current LED being described, increments on reads, gets set to the value on writes
+	uint16_t led_index;
+	// the number of tracking LEDs present on the device
+	uint16_t num_leds;
+} RIFT_PACKED;
+
 struct dk2_report_keepalive_mux
 {
 	uint16_t command;
@@ -449,6 +469,8 @@ struct rift_hmd
 
 	// constellation tracking
 	struct t_constellation_led_model led_model;
+	uint8_t led_sequence_length;
+	uint32_t *led_patterns;
 };
 
 /// Casting helper function

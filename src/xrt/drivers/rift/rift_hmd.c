@@ -177,6 +177,22 @@ rift_get_position_calibration_report(struct rift_hmd *hmd, struct rift_position_
 }
 
 static int
+rift_get_custom_pattern_report(struct rift_hmd *hmd, struct rift_custom_pattern_report *custom_pattern_report)
+{
+	uint8_t buf[REPORT_MAX_SIZE] = {0};
+
+	int result = rift_get_report(hmd, FEATURE_REPORT_CUSTOM_PATTERN, buf, sizeof(buf));
+	if (result < 0) {
+		return result;
+	}
+
+	// FIXME: handle endianness
+	memcpy(custom_pattern_report, buf + 1, sizeof(*custom_pattern_report));
+
+	return 0;
+}
+
+static int
 rift_set_config(struct rift_hmd *hmd, struct rift_config_report *config)
 {
 	return rift_send_report(hmd, FEATURE_REPORT_CONFIG, config, sizeof(*config));
@@ -204,6 +220,9 @@ rift_hmd_destroy(struct xrt_device *xdev)
 
 	if(hmd->led_model.leds)
 		t_constellation_led_model_clear(&hmd->led_model);
+
+	if (hmd->led_patterns)
+		free(hmd->led_patterns);
 
 	m_relation_history_destroy(&hmd->relation_hist);
 
@@ -498,6 +517,7 @@ static void
 rift_parse_position_report(struct t_constellation_led *out_led,
                            struct rift_position_calibration_report *position_report)
 {
+	out_led->id = (uint8_t)position_report->position_index;
 	// FIXME: 3.5 is the radius used by the other drivers, what's the actual value for the DK2?
 	out_led->radius_mm = 3.5;
 	PARSE_MICROMETER_TRIPLET(out_led->pos, position_report->position);
@@ -510,6 +530,7 @@ rift_read_leds(struct rift_hmd *hmd)
 {
 	int result;
 	struct rift_position_calibration_report position_report;
+	struct rift_custom_pattern_report custom_pattern_report;
 
 	result = rift_get_position_calibration_report(hmd, &position_report);
 	if (result < 0)
@@ -519,7 +540,10 @@ rift_read_leds(struct rift_hmd *hmd)
 
 	uint8_t num_leds;
 
+	// technically over-allocating, but it's fine.
 	led_model.leds = calloc(position_report.num_positions, sizeof(*led_model.leds));
+	uint32_t *led_patterns = calloc(position_report.num_positions, sizeof(*hmd->led_patterns));
+	uint8_t led_sequence_length;
 
 	// we reading one too many, but it should loop back and we'll get the first one again anyway
 	for (uint16_t i = 0; i < position_report.num_positions; i++) {
@@ -532,17 +556,33 @@ rift_read_leds(struct rift_hmd *hmd)
 			continue;
 		}
 
-		led_model.leds[num_leds].id = num_leds;
 		rift_parse_position_report(&led_model.leds[num_leds++], &position_report);
 	}
-
 	led_model.num_leds = num_leds;
 
+	for(uint8_t i = 0; i < led_model.num_leds; i++) {
+		result = rift_get_custom_pattern_report(hmd, &custom_pattern_report);
+		if (result < 0)
+			goto cleanup;
+
+		if(custom_pattern_report.num_leds != num_leds) {
+			HMD_ERROR(hmd, "Custom pattern length does not match LED count");
+			result = -1;
+			goto cleanup;
+		}
+
+		led_patterns[custom_pattern_report.led_index] = custom_pattern_report.sequence;
+		led_sequence_length = custom_pattern_report.sequence_length;
+	}
+
 	hmd->led_model = led_model;
+	hmd->led_patterns = led_patterns;
+	hmd->led_sequence_length = led_sequence_length;
 
 	return 0;
 cleanup:
 	free(led_model.leds);
+	free(led_patterns);
 	return result;
 }
 
@@ -758,8 +798,8 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		for (uint8_t i = 0; i < hmd->led_model.num_leds; i++) {
 			struct t_constellation_led led = hmd->led_model.leds[i];
 
-			HMD_DEBUG(hmd, "Read LED %d, %fx%fx%f (%fx%fx%f)", led.id, led.pos.x, led.pos.y, led.pos.z,
-			         led.dir.x, led.dir.y, led.dir.z);
+			HMD_DEBUG(hmd, "Read LED %d, %fx%fx%f (%fx%fx%f), pattern %x", led.id, led.pos.x, led.pos.y, led.pos.z,
+			         led.dir.x, led.dir.y, led.dir.z, hmd->led_patterns[led.id]);
 		}
 	}
 	HMD_DEBUG(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pos.x, hmd->imu_pos.y, hmd->imu_pos.z);
