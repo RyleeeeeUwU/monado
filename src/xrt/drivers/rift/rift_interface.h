@@ -23,6 +23,8 @@
 #include "math/m_api.h"
 #include "math/m_mathinclude.h"
 
+#include "tracking/t_led_models.h"
+
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -119,7 +121,7 @@ enum rift_lens_distortion_version
 
 /*
  *
- * Packed structs for USB communication (borrowed from Rokid driver)
+ * Packed structs for USB communication (RIFT_PACKED borrowed from Rokid driver)
  *
  */
 
@@ -194,6 +196,45 @@ struct rift_lens_distortion_report
 	} RIFT_PACKED data;
 } RIFT_PACKED;
 
+enum rift_position_calibration_version
+{
+	// no data stored
+	RIFT_POSITION_CALIBRATION_VERSION_NONE = 0,
+	// hard-coded default positions
+	RIFT_POSITION_CALIBRATION_VERSION_DEFAULT = 1,
+	// factory calibrated
+	RIFT_POSITION_CALIBRATION_VERSION_FACTORY = 2,
+	// user calibrated
+	RIFT_POSITION_CALIBRATION_VERSION_USER = 3,
+};
+
+enum rift_position_calibration_type
+{
+	RIFT_POSITION_CALIBRATION_TYPE_LED = 0,
+	RIFT_POSITION_CALIBRATION_TYPE_INERTIAL_SENSOR = 1,
+};
+
+struct rift_position_calibration_report
+{
+	uint16_t command_id;
+	// the version/type of calibration, see rift_position_calibration_version
+	uint8_t version;
+	// the x/y/z position of the object, this is a signed integer in micrometers, position is relative to the center
+	// of the emitter plane of the display at nominal focus.
+	int32_t position[3];
+	// the x/y/z axis normal of the object, this is a signed integer in micrometers, normal is relative to the
+	// position
+	int16_t normal[3];
+	// rotation around the normal, in units of 10^-4 radians
+	uint16_t rotation;
+	// the current position in the array of LEDs, increments on reads, gets set to the value on writes
+	uint16_t position_index;
+	// read-only value of the number of LEDs
+	uint16_t num_positions;
+	// the type of the object being described, see rift_position_calibration_type
+	uint16_t position_type;
+} RIFT_PACKED;
+
 struct dk2_report_keepalive_mux
 {
 	uint16_t command;
@@ -226,7 +267,6 @@ enum rift_display_flags
 	RIFT_DISPLAY_READ_PIXEL = 1 << 10,
 	RIFT_DISPLAY_DIRECT_PENTILE = 1 << 11,
 };
-
 struct rift_display_report
 {
 	uint16_t command_id;
@@ -290,6 +330,12 @@ struct dk2_in_report
 #pragma pack(pop)
 #endif
 
+/*
+ *
+ * Parsed types for storage/processing
+ *
+ */
+
 struct rift_catmull_rom_distortion_data
 {
 	// the k coeffecients of the distortion
@@ -298,7 +344,6 @@ struct rift_catmull_rom_distortion_data
 	float meters_per_tan_angle_at_center;
 	float chromatic_abberation[CHROMATIC_ABBERATION_COEFFEICENT_COUNT];
 };
-
 struct rift_lens_distortion
 {
 	// the version of the lens distortion data
@@ -387,6 +432,7 @@ struct rift_hmd
 	uint32_t last_remote_sample_time_us;
 	int64_t last_remote_sample_time_ns;
 
+	struct xrt_vec3 imu_pos;
 	struct m_imu_3dof fusion;
 	struct m_clock_windowed_skew_tracker *clock_tracker;
 
@@ -400,6 +446,9 @@ struct rift_hmd
 	uint16_t distortion_in_use;
 
 	struct rift_extra_display_info extra_display_info;
+
+	// constellation tracking
+	struct t_constellation_led_model led_model;
 };
 
 /// Casting helper function

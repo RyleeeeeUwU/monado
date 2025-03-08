@@ -154,7 +154,24 @@ rift_get_lens_distortion(struct rift_hmd *hmd, struct rift_lens_distortion_repor
 		return result;
 	}
 
+	// FIXME: handle endianness
 	memcpy(lens_distortion, buf + 1, sizeof(*lens_distortion));
+
+	return 0;
+}
+
+static int
+rift_get_position_calibration_report(struct rift_hmd *hmd, struct rift_position_calibration_report *position_report)
+{
+	uint8_t buf[REPORT_MAX_SIZE] = {0};
+
+	int result = rift_get_report(hmd, FEATURE_REPORT_POS_CALIBRATION, buf, sizeof(buf));
+	if (result < 0) {
+		return result;
+	}
+
+	// FIXME: handle endianness
+	memcpy(position_report, buf + 1, sizeof(*position_report));
 
 	return 0;
 }
@@ -416,8 +433,8 @@ sensor_thread_tick(struct rift_hmd *hmd)
 			rift_sample_to_imu_space(gyro_raw, &gyro);
 
 			// work back the likely timestamp of the current sample
-			// if there's only one sample, then this will always be zero, if there's two or more samples, the
-			// previous samples will be offset by the sample rate of the IMU
+			// if there's only one sample, then this will always be zero, if there's two or more samples,
+			// the previous samples will be offset by the sample rate of the IMU
 			int64_t sample_local_timestamp_ns =
 			    local_timestamp_ns - ((MIN(report.num_samples, DK2_MAX_SAMPLES) - 1) * NS_PER_SAMPLE);
 
@@ -464,6 +481,66 @@ sensor_thread(void *ptr)
 	os_thread_helper_unlock(&hmd->sensor_thread);
 
 	return NULL;
+}
+
+#define PARSE_MICROMETER_TRIPLET(out, values)                                                                          \
+	do {                                                                                                           \
+		out.x = MICROMETERS_TO_METERS(values[0]);                                                              \
+		out.y = MICROMETERS_TO_METERS(values[1]);                                                              \
+		out.z = MICROMETERS_TO_METERS(values[2]);                                                              \
+	} while (0)
+
+
+static void
+rift_parse_position_report(struct t_constellation_led *out_led,
+                           struct rift_position_calibration_report *position_report)
+{
+	// FIXME: 3.5 is the radius used by the other drivers, what's the actual value for the DK2?
+	out_led->radius_mm = 3.5;
+	PARSE_MICROMETER_TRIPLET(out_led->pos, position_report->position);
+	PARSE_MICROMETER_TRIPLET(out_led->dir, position_report->normal);
+	math_vec3_normalize(&out_led->dir); // normalize the direction
+}
+
+static int
+rift_read_leds(struct rift_hmd *hmd)
+{
+	int result;
+	struct rift_position_calibration_report position_report;
+
+	result = rift_get_position_calibration_report(hmd, &position_report);
+	if (result < 0)
+		return result;
+
+	struct t_constellation_led_model led_model = {0};
+
+	uint8_t num_leds;
+
+	led_model.leds = calloc(position_report.num_positions, sizeof(*led_model.leds));
+
+	// we reading one too many, but it should loop back and we'll get the first one again anyway
+	for (uint16_t i = 0; i < position_report.num_positions; i++) {
+		result = rift_get_position_calibration_report(hmd, &position_report);
+		if (result < 0)
+			goto cleanup;
+
+		if (position_report.position_type == RIFT_POSITION_CALIBRATION_TYPE_INERTIAL_SENSOR) {
+			PARSE_MICROMETER_TRIPLET(hmd->imu_pos, position_report.position);
+			continue;
+		}
+
+		led_model.leds[num_leds].id = num_leds;
+		rift_parse_position_report(&led_model.leds[num_leds++], &position_report);
+	}
+
+	led_model.num_leds = num_leds;
+
+	hmd->led_model = led_model;
+
+	return 0;
+cleanup:
+	free(led_model.leds);
+	return result;
 }
 
 struct rift_hmd *
@@ -672,6 +749,17 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		hmd->base.hmd->distortion.fov[1].angle_right = 0.8138836;
 		break;
 	}
+
+	result = rift_read_leds(hmd);
+	if (result == 0) {
+		for (uint8_t i = 0; i < hmd->led_model.num_leds; i++) {
+			struct t_constellation_led led = hmd->led_model.leds[i];
+
+			HMD_DEBUG(hmd, "Read LED %d, %fx%fx%f (%fx%fx%f)", led.id, led.pos.x, led.pos.y, led.pos.z,
+			         led.dir.x, led.dir.y, led.dir.z);
+		}
+	}
+	HMD_DEBUG(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pos.x, hmd->imu_pos.y, hmd->imu_pos.z);
 
 	// Just put an initial identity value in the tracker
 	struct xrt_space_relation identity = XRT_SPACE_RELATION_ZERO;
