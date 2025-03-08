@@ -202,6 +202,9 @@ rift_hmd_destroy(struct xrt_device *xdev)
 	if (hmd->clock_tracker)
 		m_clock_windowed_skew_tracker_destroy(hmd->clock_tracker);
 
+	if(hmd->led_model.leds)
+		t_constellation_led_model_clear(&hmd->led_model);
+
 	m_relation_history_destroy(&hmd->relation_hist);
 
 	if (hmd->lens_distortions)
