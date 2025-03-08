@@ -193,9 +193,31 @@ rift_get_custom_pattern_report(struct rift_hmd *hmd, struct rift_custom_pattern_
 }
 
 static int
+rift_get_tracking_report(struct rift_hmd *hmd, struct rift_tracking_report *tracking_report)
+{
+	uint8_t buf[REPORT_MAX_SIZE] = {0};
+
+	int result = rift_get_report(hmd, FEATURE_REPORT_TRACKING, buf, sizeof(buf));
+	if (result < 0) {
+		return result;
+	}
+
+	// FIXME: handle endianness
+	memcpy(tracking_report, buf + 1, sizeof(*tracking_report));
+
+	return 0;
+}
+
+static int
 rift_set_config(struct rift_hmd *hmd, struct rift_config_report *config)
 {
 	return rift_send_report(hmd, FEATURE_REPORT_CONFIG, config, sizeof(*config));
+}
+
+static int
+rift_set_tracking(struct rift_hmd *hmd, struct rift_tracking_report *tracking)
+{
+	return rift_send_report(hmd, FEATURE_REPORT_TRACKING, tracking, sizeof(*tracking));
 }
 
 /*
@@ -362,7 +384,7 @@ rift_sample_to_imu_space(const int32_t *in, struct xrt_vec3 *out)
 }
 
 static int
-sensor_thread_tick(struct rift_hmd *hmd)
+rift_sensor_thread_tick(struct rift_hmd *hmd)
 {
 	uint8_t buf[REPORT_MAX_SIZE];
 	int result;
@@ -418,6 +440,7 @@ sensor_thread_tick(struct rift_hmd *hmd)
 		if (!hmd->processed_sample_packet) {
 			hmd->last_remote_sample_time_us = report.sample_timestamp;
 			hmd->processed_sample_packet = true;
+			hmd->last_sample_local_timestamp_ns = os_monotonic_get_ns();
 		}
 
 		// wrap-around intentional and A-OK, given these are unsigned
@@ -460,6 +483,13 @@ sensor_thread_tick(struct rift_hmd *hmd)
 			int64_t sample_local_timestamp_ns =
 			    local_timestamp_ns - ((MIN(report.num_samples, DK2_MAX_SAMPLES) - 1) * NS_PER_SAMPLE);
 
+			// drop packets which are in the past (TODO: figure out why these happen..)
+			if(sample_local_timestamp_ns < hmd->last_sample_local_timestamp_ns) {
+				return 0;
+			}
+
+			hmd->last_sample_local_timestamp_ns = sample_local_timestamp_ns;
+
 			// update the IMU for that sample
 			m_imu_3dof_update(&hmd->fusion, sample_local_timestamp_ns, &accel, &gyro);
 
@@ -480,7 +510,7 @@ sensor_thread_tick(struct rift_hmd *hmd)
 }
 
 static void *
-sensor_thread(void *ptr)
+rift_sensor_thread(void *ptr)
 {
 	U_TRACE_SET_THREAD_NAME("Rift sensor thread");
 
@@ -494,7 +524,7 @@ sensor_thread(void *ptr)
 	while (os_thread_helper_is_running_locked(&hmd->sensor_thread) && result >= 0) {
 		os_thread_helper_unlock(&hmd->sensor_thread);
 
-		result = sensor_thread_tick(hmd);
+		result = rift_sensor_thread_tick(hmd);
 
 		os_thread_helper_lock(&hmd->sensor_thread);
 		ticks += 1;
@@ -793,6 +823,8 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		break;
 	}
 
+	// 6dof tracking init
+
 	result = rift_read_leds(hmd);
 	if (result == 0) {
 		for (uint8_t i = 0; i < hmd->led_model.num_leds; i++) {
@@ -803,6 +835,20 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		}
 	}
 	HMD_DEBUG(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pos.x, hmd->imu_pos.y, hmd->imu_pos.z);
+
+	struct rift_tracking_report tracking;
+	result = rift_get_tracking_report(hmd, &tracking);
+	if(result == 0) {
+		tracking.flags = RIFT_TRACKING_ENABLE | RIFT_TRACKING_USE_CARRIER;
+		tracking.pattern_idx = 255;
+
+		result = rift_set_tracking(hmd, &tracking);
+		if(result < 0) {
+			HMD_ERROR(hmd, "Failed to enable tracking.");
+		}
+	}
+
+	// etc init
 
 	// Just put an initial identity value in the tracker
 	struct xrt_space_relation identity = XRT_SPACE_RELATION_ZERO;
@@ -821,7 +867,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	m_imu_3dof_init(&hmd->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
 	hmd->clock_tracker = m_clock_windowed_skew_tracker_alloc(64);
 
-	result = os_thread_helper_start(&hmd->sensor_thread, sensor_thread, hmd);
+	result = os_thread_helper_start(&hmd->sensor_thread, rift_sensor_thread, hmd);
 
 	if (result < 0) {
 		HMD_ERROR(hmd, "Failed to start sensor thread");
