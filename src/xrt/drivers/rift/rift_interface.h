@@ -493,7 +493,7 @@ struct rift_hmd
 	int64_t last_remote_sample_time_ns;
 	int64_t last_sample_local_timestamp_ns;
 
-	struct xrt_vec3 imu_pos;
+	struct xrt_pose imu_pose;
 	struct m_imu_3dof fusion;
 	struct m_clock_windowed_skew_tracker *clock_tracker;
 

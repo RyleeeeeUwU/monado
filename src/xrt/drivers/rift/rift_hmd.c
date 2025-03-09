@@ -547,17 +547,15 @@ rift_sensor_thread(void *ptr)
 
 static void
 rift_parse_position_report(struct t_constellation_led *out_led,
-                           struct rift_position_calibration_report *position_report)
+                           struct rift_position_calibration_report *position_report,
+						   uint8_t id)
 {
-	out_led->id = (uint8_t)position_report->position_index;
+	out_led->id = id;
 	// FIXME: 3.5 is the radius used by the other drivers, what's the actual value for the DK2?
 	out_led->radius_mm = 3.5;
 	PARSE_MICROMETER_TRIPLET(out_led->pos, position_report->position);
 	PARSE_MICROMETER_TRIPLET(out_led->dir, position_report->normal);
 	math_vec3_normalize(&out_led->dir); // normalize the direction
-
-	out_led->pos.z = -out_led->pos.z;
-	out_led->dir.z = -out_led->dir.z;
 }
 
 static int
@@ -573,7 +571,7 @@ rift_read_leds(struct rift_hmd *hmd)
 
 	struct t_constellation_led_model led_model = {0};
 
-	uint8_t num_leds;
+	uint8_t num_leds = 0;
 
 	// technically over-allocating, but it's fine.
 	led_model.leds = calloc(position_report.num_positions, sizeof(*led_model.leds));
@@ -587,13 +585,34 @@ rift_read_leds(struct rift_hmd *hmd)
 			goto cleanup;
 
 		if (position_report.position_type == RIFT_POSITION_CALIBRATION_TYPE_INERTIAL_SENSOR) {
-			PARSE_MICROMETER_TRIPLET(hmd->imu_pos, position_report.position);
+			PARSE_MICROMETER_TRIPLET(hmd->imu_pose.position, position_report.position);
+			// NOTE: we ignore the IMU orientation since it's always zeroed out..
 			continue;
 		}
 
-		rift_parse_position_report(&led_model.leds[num_leds++], &position_report);
+		uint8_t id = num_leds++;
+
+		rift_parse_position_report(&led_model.leds[id], &position_report, id);
 	}
 	led_model.num_leds = num_leds;
+
+	// transform the LEDs from OpenXR coordinates -> OpenCV coordinates
+	for(uint8_t i = 0; i < led_model.num_leds; i++) {
+		struct t_constellation_led *led = &led_model.leds[i];
+
+		struct xrt_vec3 new_pos;
+		struct xrt_vec3 new_dir;
+
+		math_pose_transform_point(&hmd->imu_pose, &led->pos, &new_pos);
+		math_quat_rotate_vec3(&hmd->imu_pose.orientation, &led->dir, &new_dir);
+
+		led->pos.x = new_pos.x;
+		led->pos.y = -new_pos.y;
+		led->pos.z = -new_pos.z;
+		led->dir.x = new_dir.x;
+		led->dir.y = -new_dir.y;
+		led->dir.z = -new_dir.z;
+	}
 
 	for (uint8_t i = 0; i < led_model.num_leds; i++) {
 		result = rift_get_custom_pattern_report(hmd, &custom_pattern_report);
@@ -634,6 +653,10 @@ rift_constellation_get_led_model(struct xrt_device *xdev, struct t_constellation
 static void 
 rift_constellation_push_observed_pose(struct xrt_device *xdev, timepoint_ns frame_mono_ns, const struct xrt_pose *pose)
 {
+	struct rift_hmd *hmd = rift_hmd(xdev);
+
+	HMD_TRACE(hmd, "Got observed pose from constellation tracking");
+
 	return;
 }
 
@@ -653,6 +676,8 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 
 	hmd->sensors = sensors;
 	hmd->num_sensors = num_sensors;
+
+	hmd->imu_pose = (struct xrt_pose)XRT_POSE_IDENTITY;
 
 	result = rift_send_keepalive(hmd);
 	if (result < 0) {
@@ -858,7 +883,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 			          led.pos.z, led.dir.x, led.dir.y, led.dir.z, hmd->led_patterns[led.id]);
 		}
 	}
-	HMD_WARN(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pos.x, hmd->imu_pos.y, hmd->imu_pos.z);
+	HMD_WARN(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pose.position.x, hmd->imu_pose.position.y, hmd->imu_pose.position.z);
 
 	struct rift_tracking_report tracking;
 	result = rift_get_tracking_report(hmd, &tracking);
