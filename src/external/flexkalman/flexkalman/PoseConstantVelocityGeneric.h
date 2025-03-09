@@ -77,7 +77,7 @@ class PoseConstantVelocityGenericProcessModel
     void predictStateOnly(State &s, double dt) const {
         FLEXKALMAN_DEBUG_OUTPUT("Time change", dt);
         // using argument-dependent lookup
-        applyVelocity(s, dt);
+        applyAcceleration(s, dt);
     }
     //! Updates state vector and error covariance
     void predictState(State &s, double dt) const {
@@ -121,12 +121,16 @@ class PoseConstantVelocityGenericProcessModel
         //! Add section for acceleration's effect on velocity (Not sure
         //! if this is right at all.)
         if (dim == 15) {
-            for (std::size_t xIndex = 0; xIndex < 3; ++xIndex) {
-                const auto mu = getMu(xIndex);
+            for (size_t i = 0; i < 3; ++i) {
+                const auto xDotIndex = 6 + i;
+                const auto xDotDotIndex = 12 + i;
+
+                const auto mu = getMu(i);
                 const auto symmetric = mu * dt;
-                cov(xIndex + 6, xIndex + 12) = symmetric;
-                cov(xIndex + 12, xIndex + 6) = symmetric;
-                cov(xIndex + 12, xIndex + 12) = mu;
+
+                cov(xDotIndex, xDotDotIndex) = symmetric;
+                cov(xDotDotIndex, xDotIndex) = symmetric;
+                cov(xDotDotIndex, xDotDotIndex) = mu;
             }
         }
         return cov;
