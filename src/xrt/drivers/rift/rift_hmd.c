@@ -15,6 +15,8 @@
 #include "os/os_time.h"
 #include "xrt/xrt_defines.h"
 #include "xrt/xrt_device.h"
+#include "xrt/xrt_frame.h"
+#include "xrt/xrt_frameserver.h"
 
 #include "rift_interface.h"
 #include "rift_distortion.h"
@@ -240,7 +242,7 @@ rift_hmd_destroy(struct xrt_device *xdev)
 	if (hmd->clock_tracker)
 		m_clock_windowed_skew_tracker_destroy(hmd->clock_tracker);
 
-	if(hmd->led_model.leds)
+	if (hmd->led_model.leds)
 		t_constellation_led_model_clear(&hmd->led_model);
 
 	if (hmd->led_patterns)
@@ -262,7 +264,7 @@ rift_hmd_get_tracked_pose(struct xrt_device *xdev,
 {
 	struct rift_hmd *hmd = rift_hmd(xdev);
 
-	if (name != XRT_INPUT_GENERIC_HEAD_POSE) {
+	if (name != XRT_INPUT_GENERIC_HEAD_POSE && name != XRT_INPUT_GENERIC_TRACKER_POSE) {
 		U_LOG_XDEV_UNSUPPORTED_INPUT(&hmd->base, hmd->log_level, name);
 		return XRT_ERROR_INPUT_UNSUPPORTED;
 	}
@@ -484,7 +486,7 @@ rift_sensor_thread_tick(struct rift_hmd *hmd)
 			    local_timestamp_ns - ((MIN(report.num_samples, DK2_MAX_SAMPLES) - 1) * NS_PER_SAMPLE);
 
 			// drop packets which are in the past (TODO: figure out why these happen..)
-			if(sample_local_timestamp_ns < hmd->last_sample_local_timestamp_ns) {
+			if (sample_local_timestamp_ns < hmd->last_sample_local_timestamp_ns) {
 				return 0;
 			}
 
@@ -590,12 +592,12 @@ rift_read_leds(struct rift_hmd *hmd)
 	}
 	led_model.num_leds = num_leds;
 
-	for(uint8_t i = 0; i < led_model.num_leds; i++) {
+	for (uint8_t i = 0; i < led_model.num_leds; i++) {
 		result = rift_get_custom_pattern_report(hmd, &custom_pattern_report);
 		if (result < 0)
 			goto cleanup;
 
-		if(custom_pattern_report.num_leds != num_leds) {
+		if (custom_pattern_report.num_leds != num_leds) {
 			HMD_ERROR(hmd, "Custom pattern length does not match LED count");
 			result = -1;
 			goto cleanup;
@@ -616,8 +618,24 @@ cleanup:
 	return result;
 }
 
+static bool
+rift_constellation_get_led_model(struct xrt_device *xdev, struct t_constellation_led_model *led_model)
+{
+	struct rift_hmd *hmd = rift_hmd(xdev);
+	
+	*led_model = hmd->led_model;
+
+	return true;
+}
+
+static void 
+rift_constellation_push_observed_pose(struct xrt_device *xdev, timepoint_ns frame_mono_ns, const struct xrt_pose *pose)
+{
+	return;
+}
+
 struct rift_hmd *
-rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *device_name, char *serial_number)
+rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *device_name, char *serial_number, struct rift_sensor *sensors, size_t num_sensors)
 {
 	int result;
 
@@ -629,6 +647,9 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 
 	hmd->variant = variant;
 	hmd->hid_dev = dev;
+
+	hmd->sensors = sensors;
+	hmd->num_sensors = num_sensors;
 
 	result = rift_send_keepalive(hmd);
 	if (result < 0) {
@@ -830,22 +851,50 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		for (uint8_t i = 0; i < hmd->led_model.num_leds; i++) {
 			struct t_constellation_led led = hmd->led_model.leds[i];
 
-			HMD_DEBUG(hmd, "Read LED %d, %fx%fx%f (%fx%fx%f), pattern %x", led.id, led.pos.x, led.pos.y, led.pos.z,
-			         led.dir.x, led.dir.y, led.dir.z, hmd->led_patterns[led.id]);
+			HMD_DEBUG(hmd, "Read LED %d, %fx%fx%f (%fx%fx%f), pattern %x", led.id, led.pos.x, led.pos.y,
+			          led.pos.z, led.dir.x, led.dir.y, led.dir.z, hmd->led_patterns[led.id]);
 		}
 	}
 	HMD_DEBUG(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pos.x, hmd->imu_pos.y, hmd->imu_pos.z);
 
 	struct rift_tracking_report tracking;
 	result = rift_get_tracking_report(hmd, &tracking);
-	if(result == 0) {
+	if (result == 0) {
 		tracking.flags = RIFT_TRACKING_ENABLE | RIFT_TRACKING_USE_CARRIER;
-		tracking.pattern_idx = 255;
+		tracking.pattern_idx = 0xff;
+		tracking.vsync_offset = 0;
+		tracking.duty_cycle = 0x7f;
+		tracking.exposure_length = 16666; // HACK ALERT: THIS SHOULD BE LIKE 350, BUT I DONT HAVE CAMERA SYNC WORKING!!!
+		tracking.frame_interval = 16666;
 
 		result = rift_set_tracking(hmd, &tracking);
-		if(result < 0) {
+		if (result < 0) {
 			HMD_ERROR(hmd, "Failed to enable tracking.");
 		}
+	}
+
+	if(num_sensors > 0) {
+		struct rift_sensor sensor = sensors[0];
+
+		hmd->constellation_camera_group.cam_count = 1;
+		hmd->constellation_camera_group.cams[0].blob_min_threshold = 0x60;
+		hmd->constellation_camera_group.cams[0].blob_detect_threshold = 0x80;
+		hmd->constellation_camera_group.cams[0].roi.extent = (struct xrt_size){752, 480};
+
+		result = t_constellation_tracker_create(&sensor.frame_context, &hmd->base, &hmd->constellation_camera_group, &hmd->constellation_tracker, &hmd->constellation_tracker_sink);
+		if(result < 0) {
+			assert(false);
+		}
+
+		xrt_fs_stream_start(sensor.frame_server, hmd->constellation_tracker_sink, XRT_FS_CAPTURE_TYPE_TRACKING, 0);
+
+		hmd->constellation_callbacks.get_led_model = rift_constellation_get_led_model;
+		hmd->constellation_callbacks.notify_frame_received = NULL;
+		hmd->constellation_callbacks.push_observed_pose = rift_constellation_push_observed_pose;
+		hmd->constellation_tracker_device_connection = t_constellation_tracker_add_device(hmd->constellation_tracker, &hmd->base, &hmd->constellation_callbacks);
+
+		u_sink_debug_init(&hmd->constellation_tracker_debug_sink);
+		u_sink_debug_set_sink(&hmd->constellation_tracker_debug_sink, hmd->constellation_tracker_sink);
 	}
 
 	// etc init
@@ -879,6 +928,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	u_var_add_log_level(hmd, &hmd->log_level, "log_level");
 	u_var_add_f32(hmd, &hmd->extra_display_info.icd, "ICD");
 	m_imu_3dof_add_vars(&hmd->fusion, hmd, "3dof_");
+	u_var_add_sink_debug(hmd, &hmd->constellation_tracker_debug_sink, "Debug Frame Sink");
 
 	return hmd;
 error:

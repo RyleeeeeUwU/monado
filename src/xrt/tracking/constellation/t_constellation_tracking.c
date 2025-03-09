@@ -556,7 +556,7 @@ static void
 constellation_tracker_process_frame_fast(struct xrt_frame_sink *sink, struct xrt_frame *xf)
 {
 	struct t_constellation_tracker *ct = container_of(sink, struct t_constellation_tracker, fast_process_sink);
-	struct xrt_space_relation xsr_base_pose;
+	struct xrt_space_relation xsr_base_pose = {.pose = XRT_POSE_IDENTITY};
 
 	/* Allocate a tracking sample for everything we're about to process */
 	struct constellation_tracking_sample *sample = constellation_tracking_sample_new();
@@ -565,7 +565,7 @@ constellation_tracker_process_frame_fast(struct xrt_frame_sink *sink, struct xrt
 	CT_DEBUG(ct, "Starting analysis of frame %" PRIu64 " TS %" PRIu64, xf->source_sequence, xf->timestamp);
 
 	/* Get the HMD's pose so we can calculate the camera view poses */
-	xrt_device_get_tracked_pose(ct->hmd_xdev, XRT_INPUT_GENERIC_TRACKER_POSE, xf->timestamp, &xsr_base_pose);
+	// xrt_device_get_tracked_pose(ct->hmd_xdev, XRT_INPUT_GENERIC_TRACKER_POSE, xf->timestamp, &xsr_base_pose);
 
 	/* Split out camera views and collect blobs across all cameras */
 	assert(ct->cam_count <= XRT_TRACKING_MAX_SLAM_CAMS);

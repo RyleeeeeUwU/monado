@@ -12,6 +12,7 @@
 #include "util/u_misc.h"
 
 #include "rift_interface.h"
+#include "rift_sensor.h"
 
 static const char DK2_PRODUCT_STRING[] = "Rift DK2";
 
@@ -69,8 +70,17 @@ rift_found(struct xrt_prober *xp,
 		return -1;
 	}
 
-	struct rift_hmd *hd = rift_hmd_create(hid, variant, (char *)product, (char *)serial_number);
+	struct rift_sensor *sensors;
+	size_t found_sensors;
+	result = rift_find_sensors(xp, devices, device_count, &sensors, &found_sensors);
+	if(result < 0) {
+		return -1;
+	}
+
+	struct rift_hmd *hd = rift_hmd_create(hid, variant, (char *)product, (char *)serial_number, sensors, found_sensors);
 	if (hd == NULL) {
+		// TODO: properly close them
+		free(sensors);
 		return -1;
 	}
 	*out_xdev = &hd->base;

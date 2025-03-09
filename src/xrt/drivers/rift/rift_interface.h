@@ -13,6 +13,8 @@
 #include "xrt/xrt_defines.h"
 #include "xrt/xrt_prober.h"
 
+#include "rift_sensor.h"
+
 #include "os/os_hid.h"
 #include "os/os_threading.h"
 
@@ -24,6 +26,7 @@
 #include "math/m_mathinclude.h"
 
 #include "tracking/t_led_models.h"
+#include "tracking/t_constellation_tracking.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -247,7 +250,8 @@ struct rift_custom_pattern_report
 	uint16_t command_id;
 	// the length of the sequence that each LED goes through
 	uint8_t sequence_length;
-	// the sequence the specific LED goes through, 2 bits per state, 0 (off), 1 (low), and 3 (high), ordered from LSB to MSB
+	// the sequence the specific LED goes through, 2 bits per state, 0 (off), 1 (low), and 3 (high), ordered from
+	// LSB to MSB
 	uint32_t sequence;
 	// the current LED being described, increments on reads, gets set to the value on writes
 	uint16_t led_index;
@@ -278,9 +282,11 @@ struct rift_tracking_report
 	uint8_t pattern_idx;
 	// the enabled tracking flags, see rift_tracking_flags
 	uint16_t flags;
-	// the amount of time to enable the LEDs for during an exposure, sync output also follows this length, cannot be longer than frame_interval, and has a minimum of 10 microseconds
+	// the amount of time to enable the LEDs for during an exposure, sync output also follows this length, cannot be
+	// longer than frame_interval, and has a minimum of 10 microseconds
 	uint16_t exposure_length;
-	// when SYNCINPUT and VSYNC_LOCK are false, the tracking LEDs are exposed on the interval set here, in microseconds
+	// when SYNCINPUT and VSYNC_LOCK are false, the tracking LEDs are exposed on the interval set here, in
+	// microseconds
 	uint16_t frame_interval;
 	// when VSYNC_LOCK is true, this gives a fixed microsecond offset from the vsync to when the LEDs are triggered
 	uint16_t vsync_offset;
@@ -448,6 +454,7 @@ enum rift_variant
 #define OCULUS_VR_VID 0x2833
 
 #define OCULUS_DK2_PID 0x0021
+#define OCULUS_DK2_SENSOR_PID 0x0201
 
 /*!
  * Probing function for Oculus Rift devices.
@@ -505,6 +512,15 @@ struct rift_hmd
 	struct t_constellation_led_model led_model;
 	uint8_t led_sequence_length;
 	uint32_t *led_patterns;
+
+	struct rift_sensor *sensors;
+	size_t num_sensors;
+	struct t_constellation_camera_group constellation_camera_group;
+	struct t_constellation_tracker *constellation_tracker;
+	struct xrt_frame_sink *constellation_tracker_sink;
+	struct u_sink_debug constellation_tracker_debug_sink;
+	struct t_constellation_tracked_device_callbacks constellation_callbacks;
+	struct t_constellation_tracked_device_connection *constellation_tracker_device_connection;
 };
 
 /// Casting helper function
@@ -515,7 +531,7 @@ rift_hmd(struct xrt_device *xdev)
 }
 
 struct rift_hmd *
-rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *device_name, char *serial_number);
+rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *device_name, char *serial_number, struct rift_sensor *sensors, size_t num_sensors);
 
 /*!
  * @dir drivers/rift
