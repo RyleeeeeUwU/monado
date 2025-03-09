@@ -233,6 +233,9 @@ rift_hmd_destroy(struct xrt_device *xdev)
 {
 	struct rift_hmd *hmd = rift_hmd(xdev);
 
+	if (hmd->constellation_tracker_device_connection)
+		t_constellation_tracked_device_connection_disconnect(hmd->constellation_tracker_device_connection);
+
 	// Remove the variable tracking.
 	u_var_remove_root(hmd);
 
