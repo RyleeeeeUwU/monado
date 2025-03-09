@@ -555,6 +555,9 @@ rift_parse_position_report(struct t_constellation_led *out_led,
 	PARSE_MICROMETER_TRIPLET(out_led->pos, position_report->position);
 	PARSE_MICROMETER_TRIPLET(out_led->dir, position_report->normal);
 	math_vec3_normalize(&out_led->dir); // normalize the direction
+
+	out_led->pos.z = -out_led->pos.z;
+	out_led->dir.z = -out_led->dir.z;
 }
 
 static int
@@ -851,11 +854,11 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		for (uint8_t i = 0; i < hmd->led_model.num_leds; i++) {
 			struct t_constellation_led led = hmd->led_model.leds[i];
 
-			HMD_DEBUG(hmd, "Read LED %d, %fx%fx%f (%fx%fx%f), pattern %x", led.id, led.pos.x, led.pos.y,
+			HMD_WARN(hmd, "Read LED %d, %fx%fx%f (%fx%fx%f), pattern %x", led.id, led.pos.x, led.pos.y,
 			          led.pos.z, led.dir.x, led.dir.y, led.dir.z, hmd->led_patterns[led.id]);
 		}
 	}
-	HMD_DEBUG(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pos.x, hmd->imu_pos.y, hmd->imu_pos.z);
+	HMD_WARN(hmd, "hmd imu pos: %fx%fx%f", hmd->imu_pos.x, hmd->imu_pos.y, hmd->imu_pos.z);
 
 	struct rift_tracking_report tracking;
 	result = rift_get_tracking_report(hmd, &tracking);
@@ -877,9 +880,23 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		struct rift_sensor sensor = sensors[0];
 
 		hmd->constellation_camera_group.cam_count = 1;
-		hmd->constellation_camera_group.cams[0].blob_min_threshold = 0x60;
-		hmd->constellation_camera_group.cams[0].blob_detect_threshold = 0x80;
-		hmd->constellation_camera_group.cams[0].roi.extent = (struct xrt_size){752, 480};
+
+		struct t_constellation_camera *cam = &hmd->constellation_camera_group.cams[0];
+
+		cam->blob_min_threshold = 0x60;
+		cam->blob_detect_threshold = 0x80;
+		cam->roi.extent = (struct xrt_size){752, 480};
+		// HACK: this should be read from the camera itself
+		cam->calibration.distortion_model = T_DISTORTION_OPENCV_RADTAN_5;
+		cam->calibration.rt5.k1 = -0.502624;
+		cam->calibration.rt5.k2 = 0.340271;
+		cam->calibration.rt5.k3 = -0.161270;
+		cam->calibration.rt5.p1 = 0.001721;
+		cam->calibration.rt5.p2 = -0.001097;
+		cam->calibration.image_size_pixels = cam->roi.extent;
+		memcpy(cam->calibration.intrinsics[0], (float[3]){685.204f, 0, 394.269f}, sizeof(float) * 3);
+		memcpy(cam->calibration.intrinsics[1], (float[3]){0, 685.040f, 236.427f}, sizeof(float) * 3);
+		memcpy(cam->calibration.intrinsics[2], (float[3]){0, 0, 1}, sizeof(float) * 3);
 
 		result = t_constellation_tracker_create(&sensor.frame_context, &hmd->base, &hmd->constellation_camera_group, &hmd->constellation_tracker, &hmd->constellation_tracker_sink);
 		if(result < 0) {
