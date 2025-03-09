@@ -16,9 +16,8 @@
 #include "flexkalman/FlexibleKalmanBase.h"
 
 namespace flexkalman {
-template <typename State>
 class AccelerometerMeasurement
-    : public flexkalman::MeasurementBase<AccelerometerMeasurement<State>> {
+    : public flexkalman::MeasurementBase<AccelerometerMeasurement> {
 
   public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
@@ -28,30 +27,38 @@ class AccelerometerMeasurement
     using MeasurementSquareMatrix = types::SquareMatrix<Dimension>;
 
     AccelerometerMeasurement(types::Vector<3> const &accel,
+                             types::Vector<3> const &gravity_ref,
                              types::Vector<3> const &variance)
-        : accel_(accel), covariance_(variance.asDiagonal()) {}
+        : accel_(accel), gravity_ref_(gravity_ref), covariance_(variance.asDiagonal()) {}
 
+    template<typename State>
     MeasurementSquareMatrix const &getCovariance(State const & /*s*/)
 
     {
         return covariance_;
     }
 
+    template<typename State>
     MeasurementVector predictMeasurement(State const &s) const {
-        return s.acceleration();
+        // TODO: Find a way to separate gravity from acceleration
+        auto q = s.a().getCombinedQuaternion();
+        return gravity_ref_ + q * (s.a().acceleration() - s.b().accelBias());
     }
 
+    template<typename State>
     MeasurementVector getResidual(MeasurementVector const &predictedMeasurement,
                                   State const &s) const {
         return accel_ - predictedMeasurement;
     }
 
+    template<typename State>
     MeasurementVector getResidual(State const &s) const {
         return getResidual(predictMeasurement(s), s);
     }
 
   private:
     MeasurementVector accel_;
+    MeasurementVector gravity_ref_;
     MeasurementSquareMatrix covariance_;
 };
 } // namespace flexkalman
