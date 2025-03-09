@@ -248,6 +248,9 @@ rift_hmd_destroy(struct xrt_device *xdev)
 	if (hmd->led_model.leds)
 		t_constellation_led_model_clear(&hmd->led_model);
 
+	if(hmd->fusion_mutex.initialized)
+		os_mutex_destroy(&hmd->fusion_mutex);
+
 	if (hmd->led_patterns)
 		free(hmd->led_patterns);
 
@@ -495,14 +498,24 @@ rift_sensor_thread_tick(struct rift_hmd *hmd)
 
 			hmd->last_sample_local_timestamp_ns = sample_local_timestamp_ns;
 
+			os_mutex_lock(&hmd->fusion_mutex);
+
 			// update the IMU for that sample
 			m_imu_3dof_update(&hmd->fusion, sample_local_timestamp_ns, &accel, &gyro);
+
+			struct xrt_pose latest_constellation_pose = hmd->constellation_pose;
+
+			os_mutex_unlock(&hmd->fusion_mutex);
 
 			// push the pose of the IMU for that sample, doing so per sample
 			struct xrt_space_relation relation = XRT_SPACE_RELATION_ZERO;
 			relation.relation_flags = (enum xrt_space_relation_flags)(
-			    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_ORIENTATION_VALID_BIT);
-			relation.pose.orientation = hmd->fusion.rot;
+			    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT);
+			
+			relation.pose.position = latest_constellation_pose.position; // pull the constellation position
+			relation.pose.orientation = latest_constellation_pose.orientation; // and constellation rotation, for testing
+
+			// relation.pose.orientation = hmd->fusion.rot; // and IMU rot
 			m_relation_history_push(hmd->relation_hist, &relation, sample_local_timestamp_ns);
 		}
 
@@ -658,7 +671,14 @@ rift_constellation_push_observed_pose(struct xrt_device *xdev, timepoint_ns fram
 {
 	struct rift_hmd *hmd = rift_hmd(xdev);
 
-	HMD_TRACE(hmd, "Got observed pose from constellation tracking");
+	HMD_TRACE(hmd, "Got constellation pose");
+
+	os_mutex_lock(&hmd->fusion_mutex);
+
+	hmd->constellation_pose.position = pose->position;
+	hmd->constellation_pose.orientation = pose->orientation;
+
+	os_mutex_unlock(&hmd->fusion_mutex);
 
 	return;
 }
@@ -681,6 +701,13 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	hmd->num_sensors = num_sensors;
 
 	hmd->imu_pose = (struct xrt_pose)XRT_POSE_IDENTITY;
+	hmd->constellation_pose = (struct xrt_pose)XRT_POSE_IDENTITY;
+
+	result = os_mutex_init(&hmd->fusion_mutex);
+	if (result < 0) {
+		HMD_ERROR(hmd, "Failed to init fusion mutex, reason %d", result);
+		goto error;
+	}
 
 	result = rift_send_keepalive(hmd);
 	if (result < 0) {
