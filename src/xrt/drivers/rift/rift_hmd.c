@@ -911,6 +911,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 
 		struct t_constellation_camera *cam = &hmd->constellation_camera_group.cams[0];
 
+		cam->P_imu_cam = (struct xrt_pose)XRT_POSE_IDENTITY;
 		cam->blob_min_threshold = 0x60;
 		cam->blob_detect_threshold = 0x80;
 		cam->roi.extent = (struct xrt_size){752, 480};
@@ -922,9 +923,9 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		cam->calibration.rt5.p1 = 0.001721;
 		cam->calibration.rt5.p2 = -0.001097;
 		cam->calibration.image_size_pixels = cam->roi.extent;
-		memcpy(cam->calibration.intrinsics[0], (float[3]){685.204f, 0, 394.269f}, sizeof(float) * 3);
-		memcpy(cam->calibration.intrinsics[1], (float[3]){0, 685.040f, 236.427f}, sizeof(float) * 3);
-		memcpy(cam->calibration.intrinsics[2], (float[3]){0, 0, 1}, sizeof(float) * 3);
+		memcpy(cam->calibration.intrinsics[0], (double[3]){685.204f, 0, 394.269f}, sizeof(double) * 3);
+		memcpy(cam->calibration.intrinsics[1], (double[3]){0, 685.040f, 236.427f}, sizeof(double) * 3);
+		memcpy(cam->calibration.intrinsics[2], (double[3]){0, 0, 1}, sizeof(double) * 3);
 
 		result = t_constellation_tracker_create(&sensor.frame_context, &hmd->base, &hmd->constellation_camera_group, &hmd->constellation_tracker, &hmd->constellation_tracker_sink);
 		if(result < 0) {
