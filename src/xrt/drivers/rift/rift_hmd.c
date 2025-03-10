@@ -515,9 +515,8 @@ rift_sensor_thread_tick(struct rift_hmd *hmd)
 			    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT);
 			
 			relation.pose.position = latest_constellation_pose.position; // pull the constellation position
-			relation.pose.orientation = latest_constellation_pose.orientation; // and constellation rotation, for testing
-
-			// relation.pose.orientation = hmd->fusion.rot; // and IMU rot
+			// relation.pose.orientation = latest_constellation_pose.orientation; // and constellation rotation, for testing
+			relation.pose.orientation = hmd->fusion.rot; // and IMU rot
 			m_relation_history_push(hmd->relation_hist, &relation, sample_local_timestamp_ns);
 		}
 
@@ -680,6 +679,7 @@ rift_constellation_push_observed_pose(struct xrt_device *xdev, timepoint_ns fram
 
 	hmd->constellation_pose.position = pose->position;
 	hmd->constellation_pose.orientation = pose->orientation;
+	hmd->fusion.rot = pose->orientation;
 
 	os_mutex_unlock(&hmd->fusion_mutex);
 
