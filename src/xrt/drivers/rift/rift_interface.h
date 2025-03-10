@@ -499,6 +499,7 @@ struct rift_hmd
 	struct os_mutex fusion_mutex;
 	struct xrt_pose constellation_pose;
 	struct m_imu_3dof fusion;
+	struct xrt_vec3 position;
 	struct m_clock_windowed_skew_tracker *clock_tracker;
 
 	int64_t last_keepalive_time;

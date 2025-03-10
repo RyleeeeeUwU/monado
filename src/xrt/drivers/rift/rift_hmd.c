@@ -248,7 +248,9 @@ rift_hmd_destroy(struct xrt_device *xdev)
 	if (hmd->led_model.leds)
 		t_constellation_led_model_clear(&hmd->led_model);
 
+#ifndef NDEBUG
 	if(hmd->fusion_mutex.initialized)
+#endif
 		os_mutex_destroy(&hmd->fusion_mutex);
 
 	if (hmd->led_patterns)
