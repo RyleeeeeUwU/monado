@@ -589,12 +589,13 @@ rift_read_leds(struct rift_hmd *hmd)
 
 	struct t_constellation_led_model led_model = {0};
 
+	// technically over-allocating, but it's fine.
+	t_constellation_led_model_init((int)hmd->base.device_type, &led_model, position_report.num_positions);
+
 	uint8_t num_leds = 0;
 
-	// technically over-allocating, but it's fine.
-	led_model.leds = calloc(position_report.num_positions, sizeof(*led_model.leds));
 	uint32_t *led_patterns = calloc(position_report.num_positions, sizeof(*hmd->led_patterns));
-	uint8_t led_sequence_length;
+	uint8_t led_sequence_length = 0;
 
 	// we reading one too many, but it should loop back and we'll get the first one again anyway
 	for (uint16_t i = 0; i < position_report.num_positions; i++) {
