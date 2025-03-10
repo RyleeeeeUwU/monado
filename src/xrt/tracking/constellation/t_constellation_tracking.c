@@ -556,7 +556,7 @@ static void
 constellation_tracker_process_frame_fast(struct xrt_frame_sink *sink, struct xrt_frame *xf)
 {
 	struct t_constellation_tracker *ct = container_of(sink, struct t_constellation_tracker, fast_process_sink);
-	struct xrt_space_relation xsr_base_pose = {.pose = { .position = { 0.,0.,0. }, .orientation = { 1.0, 0., 0., 0. } } };
+	struct xrt_space_relation xsr_base_pose = {.pose = { .position = { 0.,0., 0.0 }, .orientation = { 0.0, 0.0, 1.0, 0. } } };
 
 	/* Allocate a tracking sample for everything we're about to process */
 	struct constellation_tracking_sample *sample = constellation_tracking_sample_new();
