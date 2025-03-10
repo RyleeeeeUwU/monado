@@ -615,7 +615,7 @@ rift_read_leds(struct rift_hmd *hmd)
 	}
 	led_model.num_leds = num_leds;
 
-	// transform the LEDs from OpenXR coordinates -> OpenCV coordinates
+	// transform the LEDs 180° around Y to make the model face the right way
 	for(uint8_t i = 0; i < led_model.num_leds; i++) {
 		struct t_constellation_led *led = &led_model.leds[i];
 
@@ -625,11 +625,11 @@ rift_read_leds(struct rift_hmd *hmd)
 		math_pose_transform_point(&hmd->imu_pose, &led->pos, &new_pos);
 		math_quat_rotate_vec3(&hmd->imu_pose.orientation, &led->dir, &new_dir);
 
-		led->pos.x = new_pos.x;
-		led->pos.y = -new_pos.y;
+		led->pos.x = -new_pos.x;
+		led->pos.y = new_pos.y;
 		led->pos.z = -new_pos.z;
-		led->dir.x = new_dir.x;
-		led->dir.y = -new_dir.y;
+		led->dir.x = -new_dir.x;
+		led->dir.y = new_dir.y;
 		led->dir.z = -new_dir.z;
 	}
 
