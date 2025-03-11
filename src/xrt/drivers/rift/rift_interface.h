@@ -494,7 +494,8 @@ struct rift_hmd
 	int64_t last_sample_local_timestamp_ns;
 
 	// the physical position of the IMU in headset coordinates
-	struct xrt_pose imu_pose;
+	struct xrt_pose P_device_imu;
+	struct xrt_pose P_imu_device;
 
 	struct os_mutex fusion_mutex;
 	struct xrt_pose constellation_pose;
@@ -522,6 +523,7 @@ struct rift_hmd
 	size_t num_sensors;
 	struct t_constellation_camera_group constellation_camera_group;
 	struct t_constellation_tracker *constellation_tracker;
+	struct xrt_frame_sink frame_flip_sink;
 	struct xrt_frame_sink *constellation_tracker_sink;
 	struct u_sink_debug constellation_tracker_debug_sink;
 	struct t_constellation_tracked_device_callbacks constellation_callbacks;
@@ -536,7 +538,12 @@ rift_hmd(struct xrt_device *xdev)
 }
 
 struct rift_hmd *
-rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *device_name, char *serial_number, struct rift_sensor *sensors, size_t num_sensors);
+rift_hmd_create(struct os_hid_device *dev,
+                enum rift_variant variant,
+                char *device_name,
+                char *serial_number,
+                struct rift_sensor *sensors,
+                size_t num_sensors);
 
 /*!
  * @dir drivers/rift

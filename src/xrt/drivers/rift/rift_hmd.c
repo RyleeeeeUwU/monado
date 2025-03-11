@@ -22,6 +22,7 @@
 #include "rift_distortion.h"
 
 #include "math/m_relation_history.h"
+#include "math/m_space.h"
 #include "math/m_clock_tracking.h"
 #include "math/m_api.h"
 #include "math/m_vec2.h"
@@ -30,6 +31,7 @@
 #include "util/u_debug.h"
 #include "util/u_device.h"
 #include "util/u_distortion_mesh.h"
+#include "util/u_frame.h"
 #include "util/u_logging.h"
 #include "util/u_misc.h"
 #include "util/u_time.h"
@@ -277,22 +279,33 @@ rift_hmd_get_tracked_pose(struct xrt_device *xdev,
 		return XRT_ERROR_INPUT_UNSUPPORTED;
 	}
 
-	struct xrt_space_relation relation = XRT_SPACE_RELATION_ZERO;
+	struct xrt_relation_chain xrc = {0};
 
+	if (name == XRT_INPUT_GENERIC_HEAD_POSE) {
+		// Fusion pose is IMU, so for head pose push the IMU -> device transform
+		m_relation_chain_push_pose(&xrc, &hmd->P_imu_device);
+	}
+	// else, just the vanilla 'tracker pose' = IMU pose
+
+	struct xrt_space_relation *relation = m_relation_chain_reserve(&xrc);
+
+	os_mutex_lock(&hmd->fusion_mutex);
 	enum m_relation_history_result history_result =
-	    m_relation_history_get(hmd->relation_hist, at_timestamp_ns, &relation);
+	    m_relation_history_get(hmd->relation_hist, at_timestamp_ns, relation);
+	os_mutex_unlock(&hmd->fusion_mutex);
+
 	if (history_result == M_RELATION_HISTORY_RESULT_INVALID) {
 		// If you get in here, it means you did not push any poses into the relation history.
 		// You may want to handle this differently.
 		HMD_ERROR(hmd, "Internal error: no poses pushed?");
 	}
 
-	if ((relation.relation_flags & XRT_SPACE_RELATION_ORIENTATION_VALID_BIT) != 0) {
+	if ((relation->relation_flags & XRT_SPACE_RELATION_ORIENTATION_VALID_BIT) != 0) {
 		// If we provide an orientation, make sure that it is normalized.
-		math_quat_normalize(&relation.pose.orientation);
+		math_quat_normalize(&relation->pose.orientation);
 	}
 
-	*out_relation = relation;
+	m_relation_chain_resolve(&xrc, out_relation);
 	return XRT_SUCCESS;
 }
 
@@ -507,17 +520,19 @@ rift_sensor_thread_tick(struct rift_hmd *hmd)
 
 			struct xrt_pose latest_constellation_pose = hmd->constellation_pose;
 
-			os_mutex_unlock(&hmd->fusion_mutex);
-
 			// push the pose of the IMU for that sample, doing so per sample
 			struct xrt_space_relation relation = XRT_SPACE_RELATION_ZERO;
 			relation.relation_flags = (enum xrt_space_relation_flags)(
-			    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT);
-			
+			    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_ORIENTATION_VALID_BIT |
+			    XRT_SPACE_RELATION_POSITION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT);
+
 			relation.pose.position = latest_constellation_pose.position; // pull the constellation position
-			// relation.pose.orientation = latest_constellation_pose.orientation; // and constellation rotation, for testing
+			// relation.pose.orientation = latest_constellation_pose.orientation; // and constellation
+			// rotation, for testing
 			relation.pose.orientation = hmd->fusion.rot; // and IMU rot
 			m_relation_history_push(hmd->relation_hist, &relation, sample_local_timestamp_ns);
+
+			os_mutex_unlock(&hmd->fusion_mutex);
 		}
 
 		break;
@@ -589,7 +604,10 @@ rift_read_leds(struct rift_hmd *hmd)
 	struct t_constellation_led_model led_model = {0};
 
 	// technically over-allocating, but it's fine.
-	t_constellation_led_model_init((int)hmd->base.device_type, &led_model, position_report.num_positions);
+	struct xrt_pose P_device_model =
+	    (struct xrt_pose){.position = {0.0, 0.0, 0.0}, .orientation = {.x = 0.0, .y = 1.0, .z = 0.0, .w = 0.0}};
+	t_constellation_led_model_init((int)hmd->base.device_type, &P_device_model, &led_model,
+	                               position_report.num_positions);
 
 	uint8_t num_leds = 0;
 
@@ -603,8 +621,11 @@ rift_read_leds(struct rift_hmd *hmd)
 			goto cleanup;
 
 		if (position_report.position_type == RIFT_POSITION_CALIBRATION_TYPE_INERTIAL_SENSOR) {
-			PARSE_MICROMETER_TRIPLET(hmd->imu_pose.position, position_report.position);
+			PARSE_MICROMETER_TRIPLET(hmd->P_device_imu.position, position_report.position);
 			// NOTE: we ignore the IMU orientation since it's always zeroed out..
+
+			// Invert the pose for device relative to IMU
+			math_pose_invert(&hmd->P_device_imu, &hmd->P_imu_device);
 			continue;
 		}
 
@@ -614,21 +635,22 @@ rift_read_leds(struct rift_hmd *hmd)
 	}
 	led_model.num_leds = num_leds;
 
-	// transform the LEDs 180° around Y to make the model face the right way
-	for(uint8_t i = 0; i < led_model.num_leds; i++) {
+	for (uint8_t i = 0; i < led_model.num_leds; i++) {
 		struct t_constellation_led *led = &led_model.leds[i];
 
 		struct xrt_vec3 new_pos;
 		struct xrt_vec3 new_dir;
 
-		math_pose_transform_point(&hmd->imu_pose, &led->pos, &new_pos);
-		math_quat_rotate_vec3(&hmd->imu_pose.orientation, &led->dir, &new_dir);
+		// Make the LED position and dir relative to the IMU pose
+		math_pose_transform_point(&hmd->P_imu_device, &led->pos, &new_pos);
+		math_quat_rotate_vec3(&hmd->P_imu_device.orientation, &led->dir, &new_dir);
 
-		led->pos.x = -new_pos.x;
-		led->pos.y = new_pos.y;
+		// flip around X for OpenCV -> OpenXR coords
+		led->pos.x = new_pos.x;
+		led->pos.y = -new_pos.y;
 		led->pos.z = -new_pos.z;
-		led->dir.x = -new_dir.x;
-		led->dir.y = new_dir.y;
+		led->dir.x = new_dir.x;
+		led->dir.y = -new_dir.y;
 		led->dir.z = -new_dir.z;
 	}
 
@@ -686,8 +708,45 @@ rift_constellation_push_observed_pose(struct xrt_device *xdev, timepoint_ns fram
 	return;
 }
 
+/* @todo: This horizontal flip of every input frame
+ * is needed when using the DK2 sensor as a v4l2 input because the
+ * camera only flips vertically by default, so everything is h-mirrored.
+ * Once the OpenHMD UVC sensor code is imported, it sets the camera to
+ * flipped mode on setup and this can go away */
+static void
+hflip_video_frame(struct xrt_frame_sink *sink, struct xrt_frame *xf)
+{
+	struct rift_hmd *hmd = container_of(sink, struct rift_hmd, frame_flip_sink);
+
+	// Horizontally flip input frame
+	struct xrt_frame *xf_out = NULL;
+	u_frame_create_one_off(xf->format, xf->width, xf->height, &xf_out);
+	xf_out->timestamp = xf->timestamp;
+	xf_out->source_timestamp = xf->source_timestamp;
+	xf_out->source_sequence = xf->source_sequence;
+
+	for (uint32_t y = 0; y < xf->height; y++) {
+		uint8_t *src = xf->data + xf->stride * y;
+		uint8_t *dst = xf_out->data + xf_out->stride * y;
+
+		int out = xf->width - 1;
+		for (uint32_t x = 0; x < xf->width; x++) {
+			dst[out--] = src[x];
+		}
+	}
+
+	xrt_sink_push_frame(hmd->constellation_tracker_sink, xf_out);
+
+	xrt_frame_reference(&xf_out, NULL);
+}
+
 struct rift_hmd *
-rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *device_name, char *serial_number, struct rift_sensor *sensors, size_t num_sensors)
+rift_hmd_create(struct os_hid_device *dev,
+                enum rift_variant variant,
+                char *device_name,
+                char *serial_number,
+                struct rift_sensor *sensors,
+                size_t num_sensors)
 {
 	int result;
 
@@ -703,7 +762,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	hmd->sensors = sensors;
 	hmd->num_sensors = num_sensors;
 
-	hmd->imu_pose = (struct xrt_pose)XRT_POSE_IDENTITY;
+	hmd->P_imu_device = hmd->P_device_imu = (struct xrt_pose)XRT_POSE_IDENTITY;
 	hmd->constellation_pose = (struct xrt_pose)XRT_POSE_IDENTITY;
 
 	result = os_mutex_init(&hmd->fusion_mutex);
@@ -957,17 +1016,21 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 		memcpy(cam->calibration.intrinsics[1], (double[3]){0, 685.040f, 236.427f}, sizeof(double) * 3);
 		memcpy(cam->calibration.intrinsics[2], (double[3]){0, 0, 1}, sizeof(double) * 3);
 
-		result = t_constellation_tracker_create(&sensor.frame_context, &hmd->base, &hmd->constellation_camera_group, &hmd->constellation_tracker, &hmd->constellation_tracker_sink);
-		if(result < 0) {
+		result =
+		    t_constellation_tracker_create(&sensor.frame_context, &hmd->base, &hmd->constellation_camera_group,
+		                                   &hmd->constellation_tracker, &hmd->constellation_tracker_sink);
+		if (result < 0) {
 			assert(false);
 		}
 
-		xrt_fs_stream_start(sensor.frame_server, hmd->constellation_tracker_sink, XRT_FS_CAPTURE_TYPE_TRACKING, 0);
+		hmd->frame_flip_sink.push_frame = hflip_video_frame;
+		xrt_fs_stream_start(sensor.frame_server, &hmd->frame_flip_sink, XRT_FS_CAPTURE_TYPE_TRACKING, 0);
 
 		hmd->constellation_callbacks.get_led_model = rift_constellation_get_led_model;
 		hmd->constellation_callbacks.notify_frame_received = NULL;
 		hmd->constellation_callbacks.push_observed_pose = rift_constellation_push_observed_pose;
-		hmd->constellation_tracker_device_connection = t_constellation_tracker_add_device(hmd->constellation_tracker, &hmd->base, &hmd->constellation_callbacks);
+		hmd->constellation_tracker_device_connection = t_constellation_tracker_add_device(
+		    hmd->constellation_tracker, &hmd->base, &hmd->constellation_callbacks);
 
 		u_sink_debug_init(&hmd->constellation_tracker_debug_sink);
 		u_sink_debug_set_sink(&hmd->constellation_tracker_debug_sink, hmd->constellation_tracker_sink);
@@ -1004,6 +1067,7 @@ rift_hmd_create(struct os_hid_device *dev, enum rift_variant variant, char *devi
 	u_var_add_log_level(hmd, &hmd->log_level, "log_level");
 	u_var_add_f32(hmd, &hmd->extra_display_info.icd, "ICD");
 	m_imu_3dof_add_vars(&hmd->fusion, hmd, "3dof_");
+	u_var_add_pose(hmd, &hmd->constellation_pose, "Tracked Pose");
 	u_var_add_sink_debug(hmd, &hmd->constellation_tracker_debug_sink, "Debug Frame Sink");
 
 	return hmd;
