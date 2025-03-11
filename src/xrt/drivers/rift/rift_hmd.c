@@ -893,8 +893,8 @@ rift_hmd_create(struct os_hid_device *dev,
 	hmd->log_level = debug_get_log_option_rift_log();
 
 	// Print name.
-	strncpy(hmd->base.str, device_name, XRT_DEVICE_NAME_LEN);
-	strncpy(hmd->base.serial, serial_number, XRT_DEVICE_NAME_LEN);
+	strncpy(hmd->base.str, device_name, XRT_DEVICE_NAME_LEN - 1);
+	strncpy(hmd->base.serial, serial_number, XRT_DEVICE_NAME_LEN - 1);
 
 	m_relation_history_create(&hmd->relation_hist);
 
