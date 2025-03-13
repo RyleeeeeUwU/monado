@@ -96,9 +96,10 @@ namespace {
 		bool tracked{false};
 		TrackingInfo orientation_state;
 		TrackingInfo position_state;
+
+		// Distance from IMU origin to slam pose position
+		Vector3d slam_pose_offset{0, 0, -0.09};
 	};
-
-
 
 	void
 	KalmanFusion::clear_position_tracked_flag()
@@ -182,8 +183,6 @@ namespace {
 	                                const struct xrt_vec3 *orientation_variance_optional,
 	                                float residual_limit)
 	{
-		Eigen::Vector3f pos = map_vec3(sample->pose.position);
-		Eigen::Quaternionf orient = map_quat(sample->pose.orientation);
 		Eigen::Vector3d position_variance{1.e-4, 1.e-4, 4.e-4};
 		Eigen::Vector3d orientation_variance{1.e-4, 1.e-4, 4.e-4};
 
@@ -194,8 +193,11 @@ namespace {
 			orientation_variance = map_vec3(*orientation_variance_optional).cast<double>();
 		}
 
-		auto pos_measurement = AbsolutePositionMeasurement{pos.cast<double>(), position_variance};
-		auto orient_measurement = AbsoluteOrientationMeasurement{orient.cast<double>(), orientation_variance};
+		Eigen::Vector3d pos = map_vec3(sample->pose.position).cast<double>();
+		Eigen::Quaterniond orient = map_quat(sample->pose.orientation).cast<double>();
+
+		auto pos_measurement = AbsolutePositionLeverArmMeasurement{pos, slam_pose_offset, position_variance};
+		auto orient_measurement = AbsoluteOrientationMeasurement{orient, orientation_variance};
 
 		double pos_resid = pos_measurement.getResidual(filter_state).norm();
 		double orient_resid = orient_measurement.getResidual(filter_state).norm();
