@@ -42,7 +42,8 @@ class AccelerometerMeasurement
     MeasurementVector predictMeasurement(State const &s) const {
         // TODO: Find a way to separate gravity from acceleration
         auto q = s.a().getCombinedQuaternion();
-        return gravity_ref_ + q * (s.a().acceleration() - s.b().accelBias());
+        //return gravity_ref_ + q * (s.a().acceleration() - s.b().accelBias());
+        return q * (s.a().acceleration() - s.b().accelBias());
     }
 
     template<typename State>
