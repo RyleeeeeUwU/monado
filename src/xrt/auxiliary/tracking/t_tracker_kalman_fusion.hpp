@@ -40,7 +40,9 @@ public:
 	clear_position_tracked_flag() = 0;
 
 	virtual void
-	process_imu_data(const struct xrt_imu_sample *sample, const struct xrt_vec3 *orientation_variance_optional) = 0;
+	process_imu_data(const struct xrt_imu_sample *sample,
+	                 const struct xrt_vec3 *accel_variance_optional,
+	                 const struct xrt_vec3 *gyro_variance_optional) = 0;
 	virtual void
 	process_slam_pose(const struct xrt_pose_sample *sample,
 	                  const struct xrt_vec3 *position_variance_optional,

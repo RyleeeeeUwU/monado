@@ -43,9 +43,10 @@ kalman_fusion_destroy(KalmanFusionInterfaceWrapper *wrapper)
 void
 kalman_fusion_process_imu_data(KalmanFusionInterfaceWrapper *wrapper,
                                struct xrt_imu_sample *sample,
-                               struct xrt_vec3 *orientation_variance_optional)
+                               const struct xrt_vec3 *accel_variance_optional,
+                               const struct xrt_vec3 *gyro_variance_optional)
 {
-	wrapper->fusion->process_imu_data(sample, orientation_variance_optional);
+	wrapper->fusion->process_imu_data(sample, accel_variance_optional, gyro_variance_optional);
 }
 
 void

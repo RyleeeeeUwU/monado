@@ -26,20 +26,21 @@ kalman_fusion_destroy(struct KalmanFusionInterfaceWrapper *wrapper);
 
 void
 kalman_fusion_process_imu_data(struct KalmanFusionInterfaceWrapper *wrapper,
-                              struct xrt_imu_sample *sample,
-                              struct xrt_vec3 *orientation_variance_optional);
+                               struct xrt_imu_sample *sample,
+                               const struct xrt_vec3 *accel_variance_optional,
+                               const struct xrt_vec3 *gyro_variance_optional);
 
 void
 kalman_fusion_process_slam_pose(struct KalmanFusionInterfaceWrapper *wrapper,
-                               struct xrt_pose_sample *sample,
-                               struct xrt_vec3 *position_variance_optional,
-                               struct xrt_vec3 *orientation_variance_optional,
-                               float residual_limit);
+                                struct xrt_pose_sample *sample,
+                                struct xrt_vec3 *position_variance_optional,
+                                struct xrt_vec3 *orientation_variance_optional,
+                                float residual_limit);
 
 void
 kalman_fusion_get_prediction(struct KalmanFusionInterfaceWrapper *wrapper,
-                            timepoint_ns timestamp_ns,
-                            struct xrt_space_relation *out_relation);
+                             timepoint_ns timestamp_ns,
+                             struct xrt_space_relation *out_relation);
 
 #ifdef __cplusplus
 }
