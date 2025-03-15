@@ -64,15 +64,17 @@ namespace {
 
 		void
 		process_imu_data(const struct xrt_imu_sample *sample,
-		                 const struct xrt_vec3 *orientation_variance_optional) override;
+		                 const struct xrt_vec3 *accel_variance_optional,
+		                 const struct xrt_vec3 *gyro_variance_optional) override;
 		void
 		process_slam_pose(const struct xrt_pose_sample *sample,
 		                  const struct xrt_vec3 *position_variance_optional,
 		                  const struct xrt_vec3 *orientation_variance_optional,
-		                  float residual_limit) override;
+		                  const float residual_limit) override;
 
 		void
-		get_prediction(timepoint_ns when_ns, struct xrt_space_relation *out_relation) override;
+		get_prediction(const timepoint_ns when_ns,
+		               struct xrt_space_relation *out_relation) override;
 
 	private:
 		void
@@ -121,12 +123,16 @@ namespace {
 
 	void
 	KalmanFusion::process_imu_data(const struct xrt_imu_sample *sample,
-	                               const struct xrt_vec3 *orientation_variance_optional)
+	                               const struct xrt_vec3 *accel_variance_optional,
+	                               const struct xrt_vec3 *gyro_variance_optional)
 	{
-
-		Eigen::Vector3d variance = Eigen::Vector3d::Constant(0.01);
-		if (orientation_variance_optional) {
-			variance = map_vec3(*orientation_variance_optional).cast<double>();
+		Eigen::Vector3d accel_variance = Eigen::Vector3d::Constant(0.01);
+		Eigen::Vector3d gyro_variance = Eigen::Vector3d::Constant(0.01);
+		if (accel_variance_optional) {
+			accel_variance = map_vec3(*accel_variance_optional).cast<double>();
+		}
+		if (gyro_variance_optional) {
+			gyro_variance = map_vec3(*gyro_variance_optional).cast<double>();
 		}
 
 		auto accel = map_vec3_f64(sample->accel_m_s2);
@@ -146,8 +152,8 @@ namespace {
 		filter_time_ns = sample->timestamp_ns;
 
 		auto accel_residual = imu.getCorrectedWorldAccel(accel);
-		auto accel_measurement = AccelerometerMeasurement{accel_residual, variance};
-		auto gyro_measurement = BiasedGyroMeasurement{gyro, variance};
+		auto accel_measurement = AccelerometerMeasurement{accel_residual, accel_variance};
+		auto gyro_measurement = BiasedGyroMeasurement{gyro, gyro_variance};
 
 		if (flexkalman::correctUnscented(combined_state, gyro_measurement) &&
 		    flexkalman::correctUnscented(filter_state, accel_measurement)) {

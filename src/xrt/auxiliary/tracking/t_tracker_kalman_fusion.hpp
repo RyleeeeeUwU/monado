@@ -28,26 +28,29 @@ namespace xrt::auxiliary::tracking {
 class KalmanFusionInterface
 {
 public:
-	static std::unique_ptr<KalmanFusionInterface>
-	create();
-	virtual ~KalmanFusionInterface() = default;
+    static std::unique_ptr<KalmanFusionInterface>
+    create();
+    virtual ~KalmanFusionInterface() = default;
 
-	/*!
-	 * @brief If you've lost sight of the position tracking and won't even
-	 * enter another function in this class.
-	 */
-	virtual void
-	clear_position_tracked_flag() = 0;
+    /*!
+     * @brief If you've lost sight of the position tracking and won't even
+     * enter another function in this class.
+     */
+    virtual void
+    clear_position_tracked_flag() = 0;
 
-	virtual void
-	process_imu_data(const struct xrt_imu_sample *sample, const struct xrt_vec3 *orientation_variance_optional) = 0;
-	virtual void
-	process_slam_pose(const struct xrt_pose_sample *sample,
-	                  const struct xrt_vec3 *position_variance_optional,
-	                  const struct xrt_vec3 *orientation_variance_optional,
-	                  float residual_limit) = 0;
+    virtual void
+    process_imu_data(const struct xrt_imu_sample *sample,
+                     const struct xrt_vec3 *accel_variance_optional,
+                     const struct xrt_vec3 *gyro_variance_optional) = 0;
+    virtual void
+    process_slam_pose(const struct xrt_pose_sample *sample,
+                      const struct xrt_vec3 *position_variance_optional,
+                      const struct xrt_vec3 *orientation_variance_optional,
+                      const float residual_limit) = 0;
 
-	virtual void
-	get_prediction(timepoint_ns when_ns, struct xrt_space_relation *out_relation) = 0;
+    virtual void
+    get_prediction(const timepoint_ns when_ns,
+                   struct xrt_space_relation *out_relation) = 0;
 };
 } // namespace xrt::auxiliary::tracking
