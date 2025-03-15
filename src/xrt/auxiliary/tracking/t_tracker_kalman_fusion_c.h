@@ -1,33 +1,45 @@
+// Copyright 2024, Joel Valenciano
+// Copyright 2025, Beyley Cardellio
+// SPDX-License-Identifier: BSL-1.0
+/*!
+ * @file
+ * @brief  C interface to generalized kalman filter.
+ *
+ * @author Joel Valenciano <joelv1907@gmail.com>
+ * @author Beyley Cardellio <ep1cm1n10n123@gmail.com>
+ * @ingroup aux_tracking
+ */
+
 #include "xrt/xrt_tracking.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
-struct PSVR2FusionInterfaceWrapper;
+struct KalmanFusionInterfaceWrapper;
 
-struct PSVR2FusionInterfaceWrapper *
-psvr2_fusion_create(void);
-
-void
-psvr2_fusion_destroy(struct PSVR2FusionInterfaceWrapper *wrapper);
+struct KalmanFusionInterfaceWrapper *
+kalman_fusion_create(void);
 
 void
-psvr2_fusion_process_imu_data(struct PSVR2FusionInterfaceWrapper *wrapper,
-                              struct xrt_imu_sample *sample,
-                              struct xrt_vec3 *orientation_variance_optional);
+kalman_fusion_destroy(struct KalmanFusionInterfaceWrapper *wrapper);
 
 void
-psvr2_fusion_process_slam_pose(struct PSVR2FusionInterfaceWrapper *wrapper,
-                               struct xrt_pose_sample *sample,
-                               struct xrt_vec3 *position_variance_optional,
-                               struct xrt_vec3 *orientation_variance_optional,
-                               float residual_limit);
+kalman_fusion_process_imu_data(struct KalmanFusionInterfaceWrapper *wrapper,
+                               struct xrt_imu_sample *sample,
+                               struct xrt_vec3 *orientation_variance_optional);
 
 void
-psvr2_fusion_get_prediction(struct PSVR2FusionInterfaceWrapper *wrapper,
-                            timepoint_ns timestamp_ns,
-                            struct xrt_space_relation *out_relation);
+kalman_fusion_process_slam_pose(struct KalmanFusionInterfaceWrapper *wrapper,
+                                struct xrt_pose_sample *sample,
+                                struct xrt_vec3 *position_variance_optional,
+                                struct xrt_vec3 *orientation_variance_optional,
+                                float residual_limit);
+
+void
+kalman_fusion_get_prediction(struct KalmanFusionInterfaceWrapper *wrapper,
+                             timepoint_ns timestamp_ns,
+                             struct xrt_space_relation *out_relation);
 
 #ifdef __cplusplus
 }
