@@ -11,26 +11,28 @@
  */
 
 #include "tracking/t_tracker_kalman_fusion.hpp"
-#include "flexkalman/AugmentedProcessModel.h"
-#include "flexkalman/AugmentedState.h"
-#include "flexkalman/ConstantProcess.h"
-#include "flexkalman/PureVectorState.h"
 #include "tracking/t_fusion.hpp"
 #include "tracking/t_imu_fusion.hpp"
 
 #include "math/m_eigen_interop.hpp"
+#include "math/m_api.h"
 
 #include "util/u_misc.h"
 
-#include <cstdio>
-#include <flexkalman/AbsolutePositionMeasurement.h>
-#include "flexkalman/AbsoluteOrientationMeasurement.h"
-#include <flexkalman/AccelerometerMeasurement.h>
-#include <iostream>
+#include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Geometry/Quaternion.h>
+
 #include "flexkalman/FlexibleKalmanFilter.h"
 #include "flexkalman/FlexibleUnscentedCorrect.h"
-#include "flexkalman/PoseSeparatelyDampedConstantVelocity.h"
+#include "flexkalman/AbsolutePositionMeasurement.h"
+#include "flexkalman/AbsoluteOrientationMeasurement.h"
+#include "flexkalman/AccelerometerMeasurement.h"
 #include "flexkalman/PoseState.h"
+#include "flexkalman/PoseSeparatelyDampedConstantVelocity.h"
+#include "flexkalman/AugmentedState.h"
+#include "flexkalman/AugmentedProcessModel.h"
+#include "flexkalman/ConstantProcess.h"
+#include "flexkalman/IMUBiasState.h"
 
 
 namespace xrt::auxiliary::tracking {
@@ -39,15 +41,18 @@ using namespace xrt::auxiliary::math;
 
 //! Anonymous namespace to hide implementation names
 namespace {
-	using State = flexkalman::pose_externalized_rotation::State;
-	using BiasState = flexkalman::PureVectorState<3>;
+	using Eigen::Quaterniond;
+	using Eigen::Vector3d;
+	using flexkalman::pose_externalized_rotation::State;
+	using flexkalman::AccelerometerMeasurement;
+
+	using BiasState = flexkalman::IMUBiasState;
 	using CombinedState = flexkalman::AugmentedState<State, BiasState>;
 	using ProcessModelA = flexkalman::PoseSeparatelyDampedConstantVelocityProcessModel<State>;
 	using ProcessModelB = flexkalman::ConstantProcess<BiasState>;
 	using CombinedProcessModel = flexkalman::AugmentedProcessModel<ProcessModelA, ProcessModelB>;
 	using AbsolutePositionMeasurement = flexkalman::AbsolutePositionEKFMeasurement<State>;
 	using AbsoluteOrientationMeasurement = flexkalman::AbsoluteOrientationEKFMeasurement<State>;
-	using AccelerometerMeasurement = flexkalman::AccelerometerMeasurement<State>;
 
 	struct TrackingInfo
 	{
@@ -83,7 +88,7 @@ namespace {
 		reset_filter_and_imu();
 
 		State filter_state;
-		BiasState bias_state{0, 0, 0};
+		BiasState bias_state;
 		CombinedState combined_state{filter_state, bias_state};
 
 		ProcessModelA main_process_model;
@@ -127,8 +132,8 @@ namespace {
 	                               const struct xrt_vec3 *accel_variance_optional,
 	                               const struct xrt_vec3 *gyro_variance_optional)
 	{
-		Eigen::Vector3d accel_variance = Eigen::Vector3d::Constant(0.01);
-		Eigen::Vector3d gyro_variance = Eigen::Vector3d::Constant(0.01);
+		Vector3d accel_variance = Vector3d::Constant(0.01);
+		Vector3d gyro_variance = Vector3d::Constant(0.01);
 		if (accel_variance_optional) {
 			accel_variance = map_vec3(*accel_variance_optional).cast<double>();
 		}
@@ -138,6 +143,7 @@ namespace {
 
 		auto accel = map_vec3_f64(sample->accel_m_s2);
 		auto gyro = map_vec3_f64(sample->gyro_rad_secs);
+
 		imu.handleAccel(accel, sample->timestamp_ns);
 		imu.handleGyro(gyro, sample->timestamp_ns);
 		imu.postCorrect();
@@ -152,12 +158,16 @@ namespace {
 
 		filter_time_ns = sample->timestamp_ns;
 
-		auto accel_residual = imu.getCorrectedWorldAccel(accel);
-		auto accel_measurement = AccelerometerMeasurement{accel_residual, accel_variance};
+		// TODO: Find a good way to separate gravity
+		Vector3d G = { 0, -MATH_GRAVITY_M_S2, 0};
+		auto acc = Vector3d::Zero();
+
+		auto accel_measurement =
+		    AccelerometerMeasurement{acc, G, accel_variance};
 		auto gyro_measurement = BiasedGyroMeasurement{gyro, gyro_variance};
 
-		if (flexkalman::correctUnscented(combined_state, gyro_measurement) &&
-		    flexkalman::correctUnscented(filter_state, accel_measurement)) {
+		if (flexkalman::correctUnscented(combined_state, accel_measurement) &&
+		    flexkalman::correctUnscented(combined_state, gyro_measurement)) {
 			orientation_state.tracked = true;
 			orientation_state.valid = true;
 		} else {
@@ -168,7 +178,7 @@ namespace {
 		}
 
 		// 7200 deg/sec
-		constexpr double max_rad_per_sec = 20 * double(EIGEN_PI) * 2;
+		constexpr double max_rad_per_sec = 20.0 * double(EIGEN_PI) * 2;
 		if (filter_state.angularVelocity().squaredNorm() > max_rad_per_sec * max_rad_per_sec) {
 			U_LOG_E(
 			    "Got excessive angular velocity when filtering "
@@ -183,9 +193,8 @@ namespace {
 	                                const struct xrt_vec3 *orientation_variance_optional,
 	                                float residual_limit)
 	{
-		Eigen::Vector3d position_variance{1.e-4, 1.e-4, 4.e-4};
-		Eigen::Vector3d orientation_variance{1.e-4, 1.e-4, 4.e-4};
-
+		Vector3d position_variance{1.e-4, 1.e-4, 4.e-4};
+		Vector3d orientation_variance{1.e-4, 1.e-4, 4.e-4};
 		if (position_variance_optional) {
 			position_variance = map_vec3(*position_variance_optional).cast<double>();
 		}
@@ -193,8 +202,8 @@ namespace {
 			orientation_variance = map_vec3(*orientation_variance_optional).cast<double>();
 		}
 
-		Eigen::Vector3d pos = map_vec3(sample->pose.position).cast<double>();
-		Eigen::Quaterniond orient = map_quat(sample->pose.orientation).cast<double>();
+		Vector3d pos = map_vec3(sample->pose.position).cast<double>();
+		Quaterniond orient = map_quat(sample->pose.orientation).cast<double>();
 
 		auto pos_measurement = AbsolutePositionLeverArmMeasurement{pos, slam_pose_offset, position_variance};
 		auto orient_measurement = AbsoluteOrientationMeasurement{orient, orientation_variance};
