@@ -12,6 +12,10 @@ add_library(
 	t_openvr_tracker.cpp
 	t_openvr_tracker.h
 	t_tracking.h
+	t_tracker_kalman_fusion.hpp
+	t_tracker_kalman_fusion.cpp
+	t_tracker_kalman_fusion_c.cpp
+	t_tracker_kalman_fusion_c.h
 	)
 target_link_libraries(
 	aux_tracking
