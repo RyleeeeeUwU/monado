@@ -14,7 +14,7 @@
 #include "tracking/t_tracking.h"
 #include "tracking/t_calibration_opencv.hpp"
 #include "tracking/t_helper_debug_sink.hpp"
-#include "t_tracker_psvr2_fusion.hpp"
+#include "t_tracker_kalman_fusion.hpp"
 
 #include "util/u_misc.h"
 #include "util/u_debug.h"
@@ -301,7 +301,7 @@ public:
 	uint64_t last_frame;
 
 	Eigen::Vector4f model_center; // center of rotation
-	std::unique_ptr<PSVR2FusionInterface> wrapper{PSVR2FusionInterface::create()};
+	std::unique_ptr<KalmanFusionInterface> wrapper{KalmanFusionInterface::create()};
 
 #ifdef PSVR_DUMP_FOR_OFFLINE_ANALYSIS
 	FILE *dump_file;
@@ -1909,7 +1909,7 @@ imu_data(TrackerPSVR &t, timepoint_ns timestamp_ns, struct xrt_tracking_sample *
 			.accel_m_s2 = {a.x, a.y, a.z},
 			.gyro_rad_secs = {g.x, g.y, g.z},
 		};
-		t.wrapper->process_imu_data(&sample_, NULL);
+		t.wrapper->process_imu_data(&sample_, NULL, NULL);
 		m_imu_3dof_update(&t.fusion.imu_3dof, timestamp_ns, &sample->accel_m_s2, &sample->gyro_rad_secs);
 	}
 
