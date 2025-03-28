@@ -20,6 +20,7 @@
 #include "util/u_misc.h"
 
 #include <Eigen/src/Core/Matrix.h>
+#include <Eigen/src/Geometry/AngleAxis.h>
 #include <Eigen/src/Geometry/Quaternion.h>
 
 #include "flexkalman/FlexibleKalmanFilter.h"
@@ -41,6 +42,7 @@ using namespace xrt::auxiliary::math;
 
 //! Anonymous namespace to hide implementation names
 namespace {
+	using Eigen::AngleAxisd;
 	using Eigen::Quaterniond;
 	using Eigen::Vector3d;
 	using flexkalman::pose_externalized_rotation::State;
@@ -141,8 +143,8 @@ namespace {
 			gyro_variance = map_vec3(*gyro_variance_optional).cast<double>();
 		}
 
-		auto accel = map_vec3_f64(sample->accel_m_s2);
-		auto gyro = map_vec3_f64(sample->gyro_rad_secs);
+		Vector3d accel = map_vec3_f64(sample->accel_m_s2);
+		Vector3d gyro = map_vec3_f64(sample->gyro_rad_secs);
 
 		imu.handleAccel(accel, sample->timestamp_ns);
 		imu.handleGyro(gyro, sample->timestamp_ns);
@@ -161,6 +163,10 @@ namespace {
 		// TODO: Find a good way to separate gravity
 		Vector3d G = { 0, -MATH_GRAVITY_M_S2, 0};
 		auto acc = Vector3d::Zero();
+
+		// There's probably a way to simplify this, but it works
+		gyro = AngleAxisd(-EIGEN_PI/2, Vector3d::UnitY()) * gyro;
+		gyro = Vector3d{ gyro.z(), gyro.y(), -gyro.x()};
 
 		auto accel_measurement =
 		    AccelerometerMeasurement{acc, G, accel_variance};
