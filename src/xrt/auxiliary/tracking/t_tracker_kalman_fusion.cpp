@@ -161,7 +161,7 @@ namespace {
 		filter_time_ns = sample->timestamp_ns;
 
 		// TODO: Find a good way to separate gravity
-		Vector3d G = { 0, -MATH_GRAVITY_M_S2, 0};
+		Vector3d G = Vector3d::UnitY() * -MATH_GRAVITY_M_S2;
 		auto acc = Vector3d::Zero();
 
 		// There's probably a way to simplify this, but it works

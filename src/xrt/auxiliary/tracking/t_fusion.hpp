@@ -152,7 +152,7 @@ public:
 	MeasurementVector
 	predictMeasurement(State const &s) const
 	{
-		return s.b().stateVector() + s.a().angularVelocity();
+		return (s.a().angularVelocity() - s.b().gyroBias());
 	}
 
 	template <typename State>
