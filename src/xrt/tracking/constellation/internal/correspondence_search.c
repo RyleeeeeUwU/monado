@@ -20,6 +20,7 @@
 #include <assert.h>
 #include <math.h>
 
+#include "math/m_api.h"
 #include "math/m_vec3.h"
 #include "os/os_time.h"
 
@@ -34,8 +35,6 @@
 #define CHECK_ALL_PROJECTIONS 0
 
 #define MAX_LED_SEARCH_DEPTH 8
-
-#define RAD_TO_DEG(RAD) ((RAD)*180. / M_PI)
 
 /* This file implements a brute-force correspondence search between LED models and observed IR LED blobs.
  *

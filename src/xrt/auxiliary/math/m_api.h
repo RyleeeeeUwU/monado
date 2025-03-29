@@ -76,6 +76,20 @@ extern "C" {
 #define CLAMP(X, A, B) (MIN(MAX((X), (A)), (B)))
 
 
+/*!
+ * Convert a value from radians to degrees
+ *
+ * @ingroup aux_math
+ */
+#define RAD_TO_DEG(RAD) ((RAD) * 180. / M_PI)
+
+/*!
+ * Convert a value from degrees to radians
+ *
+ * @ingroup aux_math
+ */
+#define DEG_TO_RAD(DEG) ((DEG) * M_PI / 180.)
+
 /*
  *
  * Hash functions.

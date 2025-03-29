@@ -97,8 +97,6 @@ svr_hmd_get_tracked_pose(struct xrt_device *xdev,
 	return XRT_SUCCESS;
 }
 
-#define DEG_TO_RAD(DEG) (DEG * M_PI / 180.)
-
 static void
 svr_hmd_get_view_poses(struct xrt_device *xdev,
                        const struct xrt_vec3 *default_eye_relation,

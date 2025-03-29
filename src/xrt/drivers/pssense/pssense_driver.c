@@ -43,8 +43,6 @@
 
 DEBUG_GET_ONCE_LOG_OPTION(pssense_log, "PSSENSE_LOG", U_LOGGING_INFO)
 
-#define DEG_TO_RAD(DEG) (DEG * M_PI / 180.)
-
 static struct xrt_binding_input_pair simple_inputs_pssense[4] = {
     {XRT_INPUT_SIMPLE_SELECT_CLICK, XRT_INPUT_PSSENSE_TRIGGER_VALUE},
     {XRT_INPUT_SIMPLE_MENU_CLICK, XRT_INPUT_PSSENSE_OPTIONS_CLICK},

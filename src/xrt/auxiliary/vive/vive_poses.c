@@ -12,8 +12,6 @@
 #include "math/m_mathinclude.h"
 #include "math/m_api.h"
 
-#define DEG_TO_RAD(DEG) (DEG * M_PI / 180.)
-
 static void
 vive_poses_apply_right_transform(struct xrt_vec3 *out_transform_position, struct xrt_vec3 *out_transform_rotation)
 {

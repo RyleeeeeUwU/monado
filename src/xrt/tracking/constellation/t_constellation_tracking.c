@@ -14,6 +14,8 @@
 #include "tracking/t_led_models.h"
 #include "tracking/t_constellation_tracking.h"
 
+#include "math/m_api.h"
+
 #include "util/u_debug.h"
 #include "util/u_frame.h"
 #include "util/u_logging.h"
@@ -31,9 +33,6 @@
 #define MAX_TRACKED_DEVICES 4
 
 DEBUG_GET_ONCE_LOG_OPTION(ct_log, "CONSTELLATION_LOG", U_LOGGING_INFO)
-
-#define RAD_TO_DEG(RAD) ((RAD)*180. / M_PI)
-#define DEG_TO_RAD(DEG) ((DEG)*M_PI / 180.)
 
 #define MIN_ROT_ERROR DEG_TO_RAD(30)
 #define MIN_POS_ERROR 0.10

@@ -512,8 +512,6 @@ read_controller_config(struct wmr_controller_base *wcb)
 	return true;
 }
 
-#define DEG_TO_RAD(DEG) (DEG * M_PI / 180.)
-
 static xrt_result_t
 wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
                                      enum xrt_input_name name,
@@ -973,7 +971,6 @@ wmr_controller_base_push_observed_pose(struct xrt_device *xdev, timepoint_ns fra
 	wcb->last_tracked_pose_ts = frame_mono_ns;
 	wcb->last_tracked_pose = *pose;
 
-#define RAD_TO_DEG(RAD) ((RAD)*180. / M_PI)
 	if (wcb->update_yaw_from_optical) {
 #if 1
 		// Apply 5% of observed orientation yaw to 3dof fusion

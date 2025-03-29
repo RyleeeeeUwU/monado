@@ -40,8 +40,6 @@
 /* Set to 1 to print controller states continuously */
 #define DUMP_CONTROLLER_STATE 0
 
-#define DEG_TO_RAD(D) ((D)*M_PI / 180.)
-
 static struct xrt_binding_input_pair simple_inputs_rift_s[4] = {
     {XRT_INPUT_SIMPLE_SELECT_CLICK, XRT_INPUT_TOUCH_TRIGGER_VALUE},
     {XRT_INPUT_SIMPLE_MENU_CLICK, XRT_INPUT_TOUCH_MENU_CLICK},
@@ -657,7 +655,6 @@ rift_s_controller_push_observed_pose(struct xrt_device *xdev, timepoint_ns frame
 	ctrl->last_tracked_pose_ts = frame_mono_ns;
 	ctrl->last_tracked_pose = *pose;
 
-#define RAD_TO_DEG(RAD) ((RAD)*180. / M_PI)
 	if (ctrl->update_yaw_from_optical) {
 		// Apply 5% of observed orientation yaw to 3dof fusion
 		// FIXME: Do better
