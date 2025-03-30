@@ -66,10 +66,10 @@ namespace {
 		                 const struct xrt_vec3 *accel_variance_optional,
 		                 const struct xrt_vec3 *gyro_variance_optional) override;
 		void
-		process_slam_pose(const struct xrt_pose_sample *sample,
-		                  const struct xrt_vec3 *position_variance_optional,
-		                  const struct xrt_vec3 *orientation_variance_optional,
-		                  float residual_limit) override;
+		process_pose(const struct xrt_pose_sample *sample,
+		             const struct xrt_vec3 *position_variance_optional,
+		             const struct xrt_vec3 *orientation_variance_optional,
+		             float residual_limit) override;
 
 		void
 		get_prediction(timepoint_ns when_ns, struct xrt_space_relation *out_relation) override;
@@ -177,10 +177,10 @@ namespace {
 	}
 
 	void
-	KalmanFusion::process_slam_pose(const struct xrt_pose_sample *sample,
-	                                const struct xrt_vec3 *position_variance_optional,
-	                                const struct xrt_vec3 *orientation_variance_optional,
-	                                float residual_limit)
+	KalmanFusion::process_pose(const struct xrt_pose_sample *sample,
+	                           const struct xrt_vec3 *position_variance_optional,
+	                           const struct xrt_vec3 *orientation_variance_optional,
+	                           float residual_limit)
 	{
 		Eigen::Vector3f pos = map_vec3(sample->pose.position);
 		Eigen::Quaternionf orient = map_quat(sample->pose.orientation);

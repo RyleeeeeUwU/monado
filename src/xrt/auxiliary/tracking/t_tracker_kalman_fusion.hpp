@@ -44,10 +44,10 @@ public:
 	                 const struct xrt_vec3 *accel_variance_optional,
 	                 const struct xrt_vec3 *gyro_variance_optional) = 0;
 	virtual void
-	process_slam_pose(const struct xrt_pose_sample *sample,
-	                  const struct xrt_vec3 *position_variance_optional,
-	                  const struct xrt_vec3 *orientation_variance_optional,
-	                  float residual_limit) = 0;
+	process_pose(const struct xrt_pose_sample *sample,
+	             const struct xrt_vec3 *position_variance_optional,
+	             const struct xrt_vec3 *orientation_variance_optional,
+	             float residual_limit) = 0;
 
 	virtual void
 	get_prediction(timepoint_ns when_ns, struct xrt_space_relation *out_relation) = 0;

@@ -50,14 +50,14 @@ kalman_fusion_process_imu_data(KalmanFusionInterfaceWrapper *wrapper,
 }
 
 void
-kalman_fusion_process_slam_pose(KalmanFusionInterfaceWrapper *wrapper,
-                                struct xrt_pose_sample *sample,
-                                struct xrt_vec3 *position_variance_optional,
-                                struct xrt_vec3 *orientation_variance_optional,
-                                float residual_limit)
+kalman_fusion_process_pose(KalmanFusionInterfaceWrapper *wrapper,
+                           struct xrt_pose_sample *sample,
+                           struct xrt_vec3 *position_variance_optional,
+                           struct xrt_vec3 *orientation_variance_optional,
+                           float residual_limit)
 {
-	wrapper->fusion->process_slam_pose(sample, position_variance_optional, orientation_variance_optional,
-	                                   residual_limit);
+	wrapper->fusion->process_pose(sample, position_variance_optional, orientation_variance_optional,
+	                              residual_limit);
 }
 
 void
