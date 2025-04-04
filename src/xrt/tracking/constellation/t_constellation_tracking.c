@@ -104,8 +104,10 @@ struct constellation_tracker_camera_state
 	struct camera_model camera_model;
 	//! ROI in the full frame mosaic
 	struct xrt_rect roi;
-	//! Camera's pose relative to the HMD GENERIC_TRACKER_POSE (IMU)
-	struct xrt_pose P_imu_cam;
+	//! Camera's pose relative to the origin space
+	struct xrt_pose P_base_cam;
+	//! Camera's origin space
+	enum constellation_tracker_camera_origin origin_space;
 
 	//! Constellation tracking - fast tracking thread
 	struct os_mutex bw_lock; /* Protects blobwatch process vs release from long thread */
@@ -560,16 +562,12 @@ static void
 constellation_tracker_process_frame_fast(struct xrt_frame_sink *sink, struct xrt_frame *xf)
 {
 	struct t_constellation_tracker *ct = container_of(sink, struct t_constellation_tracker, fast_process_sink);
-	struct xrt_space_relation xsr_base_pose;
 
 	/* Allocate a tracking sample for everything we're about to process */
 	struct constellation_tracking_sample *sample = constellation_tracking_sample_new();
 	uint64_t fast_analysis_start_ts = os_monotonic_get_ns();
 
 	CT_DEBUG(ct, "Starting analysis of frame %" PRIu64 " TS %" PRIu64, xf->source_sequence, xf->timestamp);
-
-	/* Get the HMD's pose so we can calculate the camera view poses */
-	xrt_device_get_tracked_pose(ct->hmd_xdev, XRT_INPUT_GENERIC_TRACKER_POSE, xf->timestamp, &xsr_base_pose);
 
 	/* Split out camera views and collect blobs across all cameras */
 	assert(ct->cam_count <= XRT_TRACKING_MAX_SLAM_CAMS);
@@ -580,25 +578,38 @@ constellation_tracker_process_frame_fast(struct xrt_frame_sink *sink, struct xrt
 		struct constellation_tracker_camera_state *cam = ct->cam + i;
 		struct tracking_sample_frame *view = sample->views + i;
 
+		struct xrt_space_relation xsr_base_pose = {.pose = XRT_POSE_IDENTITY};
+
+		switch (cam->origin_space) {
+		case CONSTELLATION_CAMERA_ORIGIN_HMD_IMU:
+			/* Get the HMD's pose so we can calculate the camera view poses */
+			xrt_device_get_tracked_pose(ct->hmd_xdev, XRT_INPUT_GENERIC_TRACKER_POSE, xf->timestamp,
+			                            &xsr_base_pose);
+			break;
+		default:
+		case CONSTELLATION_CAMERA_ORIGIN_WORLD: break;
+		}
+
 		// Flip the input pose to CV coords, so we can do all our operations
 		// in OpenCV coords
 		struct xrt_pose P_cvworld_hmdimu;
 		pose_flip_YZ(&xsr_base_pose.pose, &P_cvworld_hmdimu);
 
-		math_pose_transform(&P_cvworld_hmdimu, &cam->P_imu_cam, &view->P_world_cam);
+		// transform the camera's offset from the base space with the origin pose
+		math_pose_transform(&P_cvworld_hmdimu, &cam->P_base_cam, &view->P_world_cam);
 
 		CT_DEBUG(ct,
 		         "Prepare transforms for cam %d "
 		         " HMD pose %f,%f,%f,%f pos %f,%f,%f "
-		         " P_imu_cam %f,%f,%f,%f pos %f,%f,%f "
+		         " P_base_cam %f,%f,%f,%f pos %f,%f,%f "
 		         " P_world_cam %f,%f,%f,%f pos %f,%f,%f ",
 		         i, xsr_base_pose.pose.orientation.x, xsr_base_pose.pose.orientation.y,
 		         xsr_base_pose.pose.orientation.z, xsr_base_pose.pose.orientation.w,
 		         xsr_base_pose.pose.position.x, xsr_base_pose.pose.position.y, xsr_base_pose.pose.position.z,
 
-		         cam->P_imu_cam.orientation.x, cam->P_imu_cam.orientation.y, cam->P_imu_cam.orientation.z,
-		         cam->P_imu_cam.orientation.w, cam->P_imu_cam.position.x, cam->P_imu_cam.position.y,
-		         cam->P_imu_cam.position.z,
+		         cam->P_base_cam.orientation.x, cam->P_base_cam.orientation.y, cam->P_base_cam.orientation.z,
+		         cam->P_base_cam.orientation.w, cam->P_base_cam.position.x, cam->P_base_cam.position.y,
+		         cam->P_base_cam.position.z,
 
 		         view->P_world_cam.orientation.x, view->P_world_cam.orientation.y,
 		         view->P_world_cam.orientation.z, view->P_world_cam.orientation.w, view->P_world_cam.position.x,
@@ -989,7 +1000,8 @@ t_constellation_tracker_create(struct xrt_frame_context *xfctx,
 		struct t_constellation_camera *cam_cfg = cams->cams + i;
 
 		cam->roi = cam_cfg->roi;
-		cam->P_imu_cam = cam_cfg->P_imu_cam;
+		cam->P_base_cam = cam_cfg->P_base_cam;
+		cam->origin_space = cam_cfg->origin_space;
 
 		/* Init the camera model with size and distortion */
 		cam->camera_model.width = cam_cfg->roi.extent.w;

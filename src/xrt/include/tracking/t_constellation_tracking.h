@@ -37,10 +37,19 @@ extern "C" {
 struct t_constellation_tracker;
 struct t_constellation_tracked_device_connection;
 
+enum constellation_tracker_camera_origin
+{
+	//! HMD GENERIC_TRACKER_POSE (IMU)
+	CONSTELLATION_CAMERA_ORIGIN_HMD_IMU,
+	//! World origin
+	CONSTELLATION_CAMERA_ORIGIN_WORLD,
+};
 struct t_constellation_camera
 {
-	//!< IMU to camera pose
-	struct xrt_pose P_imu_cam;
+	//!< Base space to camera pose
+	struct xrt_pose P_base_cam;
+	//! Origin space of the camera
+	enum constellation_tracker_camera_origin origin_space;
 	//! ROI in the full frame mosaic
 	struct xrt_rect roi;
 	//! Intrinsics and distortion parameters

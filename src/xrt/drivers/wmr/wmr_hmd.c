@@ -1629,7 +1629,8 @@ wmr_hmd_fill_constellation_calibration(struct wmr_hmd *wh)
 
 	// Fill camera 0
 	struct xrt_pose P_imu_c0 = wh->config.sensors.accel.pose;
-	out->cams[0] = (struct t_constellation_camera){.P_imu_cam = P_imu_c0,
+	out->cams[0] = (struct t_constellation_camera){.P_base_cam = P_imu_c0,
+	                                               .origin_space = CONSTELLATION_CAMERA_ORIGIN_HMD_IMU,
 	                                               .roi = wh->config.tcams[0]->roi,
 	                                               .calibration = wmr_hmd_get_cam_calib(wh, 0),
 	                                               .blob_min_threshold = BLOB_PIXEL_THRESHOLD_WMR,
@@ -1652,7 +1653,8 @@ wmr_hmd_fill_constellation_calibration(struct wmr_hmd *wh)
 		struct xrt_pose P_imu_ci;
 		math_pose_transform(&P_imu_c0, &P_c0_ci, &P_imu_ci);
 
-		out->cams[i] = (struct t_constellation_camera){.P_imu_cam = P_imu_ci,
+		out->cams[i] = (struct t_constellation_camera){.P_base_cam = P_imu_ci,
+		                                               .origin_space = CONSTELLATION_CAMERA_ORIGIN_HMD_IMU,
 		                                               .roi = wh->config.tcams[i]->roi,
 		                                               .calibration = wmr_hmd_get_cam_calib(wh, i),
 		                                               .blob_min_threshold = BLOB_PIXEL_THRESHOLD_WMR,

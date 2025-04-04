@@ -332,7 +332,8 @@ rift_s_fill_constellation_calibration(struct rift_s_tracker *t, struct rift_s_hm
 		    .extent = {.w = 640, .h = 480},
 		};
 		out->cams[i] = (struct t_constellation_camera){
-		    .P_imu_cam = P_imu_camcv,
+		    .P_base_cam = P_imu_camcv,
+		    .origin_space = CONSTELLATION_CAMERA_ORIGIN_HMD_IMU,
 		    .roi = roi,
 		    .calibration = rift_s_get_cam_calib(&hmd_config->camera_calibration, cam_id),
 		    .blob_min_threshold = BLOB_PIXEL_THRESHOLD,
@@ -632,7 +633,7 @@ rift_s_tracker_imu_update(struct rift_s_tracker *t,
 	}
 }
 
-#define UPPER_32BITS(x) ((x)&0xffffffff00000000ULL)
+#define UPPER_32BITS(x) ((x) & 0xffffffff00000000ULL)
 
 // Called with tracker mutex held
 static timepoint_ns
