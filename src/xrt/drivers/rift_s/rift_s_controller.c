@@ -22,6 +22,7 @@
 #include <assert.h>
 
 #include "math/m_api.h"
+#include "math/m_clock_tracking.h"
 #include "math/m_space.h"
 #include "math/m_vec3.h"
 
@@ -179,8 +180,18 @@ handle_imu_update(struct rift_s_controller *ctrl,
 	ctrl->imu_timestamp32 = imu_timestamp;
 	ctrl->last_imu_local_time_ns = local_ts;
 
+	const float freq = 500.0;
+
+	time_duration_ns last_hw2mono = ctrl->hw2mono;
+	m_clock_offset_a2b(freq, ctrl->last_imu_device_time_ns, ctrl->last_imu_local_time_ns, &ctrl->hw2mono);
+	ctrl->last_hw2mono_delta_us = (ctrl->hw2mono - last_hw2mono) / 1000;
+
 	if (!ctrl->have_calibration || !ctrl->have_config)
 		return; /* We need to finish reading the calibration or config blocks first */
+
+	/* Get the smoothed monotonic time estimate for this IMU sample */
+	timepoint_ns local_timestamp_ns = ctrl->hw2mono + ctrl->last_imu_device_time_ns;
+	ctrl->last_imu_smoothed_local_time_ns = local_timestamp_ns;
 
 	const float gyro_scale = ctrl->config.gyro_scale;
 	const float accel_scale = MATH_GRAVITY_M_S2 * ctrl->config.accel_scale;
@@ -792,6 +803,11 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 
 	u_var_add_gui_header(ctrl, NULL, "3DoF Tracking");
 	m_imu_3dof_add_vars(&ctrl->fusion, ctrl, "");
+	u_var_add_ro_i64(ctrl, &ctrl->last_imu_device_time_ns, "Controller device TS (ns)");
+	u_var_add_ro_i64(ctrl, &ctrl->last_imu_local_time_ns, "Last IMU sample local TS (ns)");
+	u_var_add_ro_i64(ctrl, &ctrl->hw2mono, "Device->local TS offset (ns)");
+	u_var_add_ro_i64(ctrl, &ctrl->last_imu_smoothed_local_time_ns, "Smoothed IMU local TS (ns)");
+	u_var_add_ro_i64(ctrl, &ctrl->last_hw2mono_delta_us, "Last Device->local TS offset change (µs)");
 
 	u_var_add_gui_header(ctrl, NULL, "Controls");
 	if (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) {

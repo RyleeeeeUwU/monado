@@ -370,6 +370,12 @@ rift_s_tracker_add_debug_ui(struct rift_s_tracker *t, void *root)
 		u_var_add_button(root, &t->gui.switch_tracker_btn, "Switch to 3DoF Tracking");
 	}
 
+	u_var_add_ro_i64(root, &t->fusion.last_imu_timestamp_ns, "HMD device TS (ns)");
+	u_var_add_ro_i64(root, &t->fusion.last_imu_local_timestamp_ns, "Last IMU sample local TS (ns)");
+	u_var_add_ro_i64(root, &t->hw2mono, "Device->local TS offset (ns)");
+	u_var_add_ro_i64(root, &t->last_hw2mono_delta_us, "Last Device->local TS offset change (µs)");
+	u_var_add_ro_i64(root, &t->last_frame_time, "Last camera frame local TS (ns)");
+
 	u_var_add_pose(root, &t->pose, "Tracked Pose");
 
 	u_var_add_gui_header(root, NULL, "3DoF Tracking");
@@ -549,9 +555,10 @@ rift_s_tracker_clock_update(struct rift_s_tracker *t, uint64_t device_timestamp_
 {
 	os_mutex_lock(&t->mutex);
 	time_duration_ns last_hw2mono = t->hw2mono;
-	const float freq = 250.0;
+	const float freq = 1000.0;
 
 	m_clock_offset_a2b(freq, device_timestamp_ns, local_timestamp_ns, &t->hw2mono);
+	t->last_hw2mono_delta_us = (t->hw2mono - last_hw2mono) / 1000;
 
 	if (!t->have_hw2mono) {
 		/* At startup, Rift S can send old data that throws off

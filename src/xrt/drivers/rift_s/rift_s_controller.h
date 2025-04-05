@@ -73,6 +73,9 @@ struct rift_s_controller
 	uint32_t imu_timestamp32;
 	timepoint_ns last_imu_device_time_ns;
 	timepoint_ns last_imu_local_time_ns;
+	time_duration_ns hw2mono; /* Device_time -> local_time smoothed offset */
+	time_duration_ns last_hw2mono_delta_us;
+	timepoint_ns last_imu_smoothed_local_time_ns;
 
 	uint16_t imu_unknown_varying2;
 	int16_t raw_accel[3];
