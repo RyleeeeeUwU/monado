@@ -19,6 +19,8 @@
 
 #include "os/os_time.h"
 #include "tracking/t_constellation_tracking.h"
+#include "tracking/t_tracker_kalman_fusion_c.h"
+
 #include "xrt/xrt_device.h"
 
 #include "rift_s.h"
@@ -85,6 +87,7 @@ struct rift_s_controller
 	struct xrt_vec3 gyro;
 	struct xrt_vec3 mag;
 	struct m_imu_3dof fusion;
+	struct KalmanFusionInterfaceWrapper *kalman_fusion;
 
 	//! Offset for IMU pose from device (from json calibration)
 	struct xrt_pose P_device_imu;

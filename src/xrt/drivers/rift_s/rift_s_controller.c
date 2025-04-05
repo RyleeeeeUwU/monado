@@ -216,6 +216,13 @@ handle_imu_update(struct rift_s_controller *ctrl,
 	m_imu_3dof_update(&ctrl->fusion, ctrl->last_imu_device_time_ns, &ctrl->accel, &ctrl->gyro);
 	ctrl->pose.orientation = ctrl->fusion.rot;
 
+	struct xrt_imu_sample imu_sample = {.timestamp_ns = local_ts,
+	                                    .gyro_rad_secs = {ctrl->gyro.x, ctrl->gyro.y, ctrl->gyro.z},
+	                                    .accel_m_s2 = {ctrl->accel.x, ctrl->accel.y, ctrl->accel.z}};
+	struct xrt_vec3 accel_variance = {0.01, 0.01, 0.01};
+	struct xrt_vec3 gyro_variance = {0.01, 0.01, 0.01};
+	kalman_fusion_process_imu_data(ctrl->kalman_fusion, &imu_sample, &accel_variance, &gyro_variance);
+
 #if 0
 	RIFT_S_DEBUG("%" PRIx64 " dt %u device time %u ns %" PRIu64
 	             " raw accel %d %d %d gyro %d %d %d -> accel %f %f %f  gyro %f %f %f\n",
@@ -535,6 +542,9 @@ rift_s_controller_get_fusion_pose(struct rift_s_controller *ctrl,
                                   int64_t at_timestamp_ns,
                                   struct xrt_space_relation *out_relation)
 {
+#if 1
+	kalman_fusion_get_prediction(ctrl->kalman_fusion, at_timestamp_ns, out_relation);
+#else
 	out_relation->pose = ctrl->pose;
 	out_relation->linear_velocity.x = 0.0f;
 	out_relation->linear_velocity.y = 0.0f;
@@ -551,6 +561,7 @@ rift_s_controller_get_fusion_pose(struct rift_s_controller *ctrl,
 	out_relation->relation_flags = (enum xrt_space_relation_flags)(
 	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
 	    XRT_SPACE_RELATION_ANGULAR_VELOCITY_VALID_BIT | XRT_SPACE_RELATION_LINEAR_VELOCITY_VALID_BIT);
+#endif
 }
 
 static xrt_result_t
@@ -610,6 +621,9 @@ rift_s_controller_destroy(struct xrt_device *xdev)
 	/* Release the HMD reference */
 	rift_s_system_reference(&ctrl->sys, NULL);
 
+	if (ctrl->kalman_fusion)
+		kalman_fusion_destroy(ctrl->kalman_fusion);
+
 	u_var_remove_root(ctrl);
 
 	m_imu_3dof_close(&ctrl->fusion);
@@ -665,6 +679,11 @@ rift_s_controller_push_observed_pose(struct xrt_device *xdev, timepoint_ns frame
 
 	ctrl->last_tracked_pose_ts = frame_mono_ns;
 	ctrl->last_tracked_pose = *pose;
+
+	struct xrt_pose_sample sample = {.pose = *pose, .timestamp_ns = frame_mono_ns};
+	struct xrt_vec3 position_variance = {1.e-6, 1.e-6, 1.e-6};
+	struct xrt_vec3 orientation_variance = {1.e-4, 1.e-6, 1.e-4};
+	kalman_fusion_process_pose(ctrl->kalman_fusion, &sample, &position_variance, &orientation_variance, 15);
 
 	if (ctrl->update_yaw_from_optical) {
 		// Apply 5% of observed orientation yaw to 3dof fusion
@@ -757,6 +776,7 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 
 	ctrl->pose.orientation.w = 1.0f; // All other values set to zero by U_DEVICE_ALLOCATE (which calls U_CALLOC)
 	m_imu_3dof_init(&ctrl->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
+	ctrl->kalman_fusion = kalman_fusion_create();
 
 	// Real offset will be updated from the calibration once available
 	ctrl->P_imu_device = ctrl->P_device_imu = (struct xrt_pose)XRT_POSE_IDENTITY;
