@@ -32,6 +32,9 @@ public:
 	create();
 	virtual ~KalmanFusionInterface() = default;
 
+	virtual void
+	add_ui(void *root, const char *device_name) = 0;
+
 	/*!
 	 * @brief If you've lost sight of the position tracking and won't even
 	 * enter another function in this class.

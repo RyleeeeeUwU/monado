@@ -22,6 +22,9 @@ struct KalmanFusionInterfaceWrapper *
 kalman_fusion_create(void);
 
 void
+kalman_fusion_add_ui(struct KalmanFusionInterfaceWrapper *wrapper, void *root, const char *device_name);
+
+void
 kalman_fusion_destroy(struct KalmanFusionInterfaceWrapper *wrapper);
 
 void

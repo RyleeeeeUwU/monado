@@ -41,6 +41,12 @@ kalman_fusion_destroy(KalmanFusionInterfaceWrapper *wrapper)
 }
 
 void
+kalman_fusion_add_ui(struct KalmanFusionInterfaceWrapper *wrapper, void *root, const char *device_name)
+{
+	wrapper->fusion->add_ui(root, device_name);
+}
+
+void
 kalman_fusion_process_imu_data(KalmanFusionInterfaceWrapper *wrapper,
                                const struct xrt_imu_sample *sample,
                                const struct xrt_vec3 *accel_variance_optional,
