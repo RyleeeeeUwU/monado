@@ -22,6 +22,7 @@
 #include "xrt/xrt_device.h"
 #include "tracking/t_led_models.h"
 #include "tracking/t_constellation_tracking.h"
+#include "tracking/t_tracker_kalman_fusion_c.h"
 
 #include "wmr_common.h"
 #include "wmr_controller_protocol.h"
@@ -193,6 +194,9 @@ struct wmr_controller_base
 
 	//! Main fusion calculator.
 	struct m_imu_3dof fusion;
+	//! Kalman fusion
+	struct KalmanFusionInterfaceWrapper *kalman_fusion;
+
 	//! The last angular velocity from the IMU, for prediction.
 	struct xrt_vec3 last_angular_velocity;
 };

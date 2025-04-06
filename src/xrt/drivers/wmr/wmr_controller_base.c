@@ -113,6 +113,14 @@ wmr_controller_base_imu_sample(struct wmr_controller_base *wcb,
 	wcb->last_imu_device_timestamp_ns = now_hw_ns;
 	wcb->last_angular_velocity = imu_sample->gyro;
 	wcb->last_imu = *imu_sample;
+
+	struct xrt_imu_sample k_imu_sample = {
+	    .timestamp_ns = mono_time_ns,
+	    .gyro_rad_secs = {imu_sample->gyro.x, imu_sample->gyro.y, imu_sample->gyro.z},
+	    .accel_m_s2 = {imu_sample->acc.x, imu_sample->acc.y, imu_sample->acc.z}};
+	struct xrt_vec3 accel_variance = {0.01, 0.01, 0.01};
+	struct xrt_vec3 gyro_variance = {0.01, 0.01, 0.01};
+	kalman_fusion_process_imu_data(wcb->kalman_fusion, &k_imu_sample, &accel_variance, &gyro_variance);
 }
 
 static void
@@ -523,11 +531,20 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	struct wmr_controller_base *wcb = wmr_controller_base(xdev);
 
 	struct xrt_relation_chain xrc = {0};
+	struct xrt_space_relation relation = {0};
 
 	if (name == XRT_INPUT_G2_CONTROLLER_GRIP_POSE || name == XRT_INPUT_ODYSSEY_CONTROLLER_GRIP_POSE ||
 	    name == XRT_INPUT_WMR_GRIP_POSE) {
 		m_relation_chain_push_pose(&xrc, &wcb->P_aim_grip);
 	}
+
+#if 1
+	kalman_fusion_get_prediction(wcb->kalman_fusion, at_timestamp_ns, &relation);
+
+	m_relation_chain_push_relation(&xrc, &relation);
+	m_relation_chain_resolve(&xrc, out_relation);
+
+#else
 
 	/* Apply the controller rotation */
 	struct xrt_pose pose = {{0, 0, 0, 1}, {0, 1.2, -0.5}};
@@ -539,7 +556,6 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 
 	// Variables needed for prediction.
 	int64_t last_imu_timestamp_ns = 0;
-	struct xrt_space_relation relation = {0};
 	relation.relation_flags = (enum xrt_space_relation_flags)(
 	    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT |
 	    XRT_SPACE_RELATION_POSITION_VALID_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT |
@@ -572,8 +588,9 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 	double prediction_s = time_ns_to_s(prediction_ns);
 
 	m_predict_relation(&relation, prediction_s, out_relation);
-	wcb->pose = out_relation->pose;
+#endif
 
+	wcb->pose = out_relation->pose;
 	return XRT_SUCCESS;
 }
 
@@ -608,6 +625,9 @@ wmr_controller_base_deinit(struct wmr_controller_base *wcb)
 
 	// Destroy the fusion.
 	m_imu_3dof_close(&wcb->fusion);
+
+	if (wcb->kalman_fusion)
+		kalman_fusion_destroy(wcb->kalman_fusion);
 }
 
 /*
@@ -663,6 +683,7 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	wcb->thumbstick_deadzone = 0.15;
 
 	m_imu_3dof_init(&wcb->fusion, M_IMU_3DOF_USE_GRAVITY_DUR_20MS);
+	wcb->kalman_fusion = kalman_fusion_create();
 
 	if (os_mutex_init(&wcb->conn_lock) != 0 || os_mutex_init(&wcb->data_lock) != 0) {
 		WMR_ERROR(wcb, "WMR Controller: Failed to init mutex!");
@@ -742,6 +763,11 @@ wmr_controller_base_init(struct wmr_controller_base *wcb,
 	u_var_add_pose(wcb, &wcb->last_tracked_pose, "Last observed pose");
 	u_var_add_ro_i64(wcb, &wcb->last_tracked_pose_ts, "Last observed pose TS");
 	u_var_add_bool(wcb, &wcb->update_yaw_from_optical, "Update yaw using tracking");
+
+	u_var_add_gui_header(wcb, NULL, "Kalman Fusion");
+	kalman_fusion_add_ui(wcb->kalman_fusion, wcb,
+	                     (wcb->base.device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) ? "wmr_left"
+	                                                                                     : "wmr_right");
 
 	u_var_add_gui_header(wcb, NULL, "LED Sync");
 	u_var_add_draggable_u16(wcb, &wcb->timesync_led_intensity_uvar, "LED intensity");
@@ -970,6 +996,11 @@ wmr_controller_base_push_observed_pose(struct xrt_device *xdev, timepoint_ns fra
 
 	wcb->last_tracked_pose_ts = frame_mono_ns;
 	wcb->last_tracked_pose = *pose;
+
+	struct xrt_pose_sample sample = {.pose = *pose, .timestamp_ns = frame_mono_ns};
+	struct xrt_vec3 position_variance = {1.e-6, 1.e-6, 1.e-6};
+	struct xrt_vec3 orientation_variance = {1.e-3, 1.e-5, 1.e-3};
+	kalman_fusion_process_pose(wcb->kalman_fusion, &sample, &position_variance, &orientation_variance, 15);
 
 	if (wcb->update_yaw_from_optical) {
 #if 1
