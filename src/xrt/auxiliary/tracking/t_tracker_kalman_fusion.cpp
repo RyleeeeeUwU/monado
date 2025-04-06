@@ -10,6 +10,12 @@
  * @ingroup aux_tracking
  */
 
+#include <cassert>
+#include <cstdio>
+#include <queue>
+
+#include "xrt/xrt_tracking.h"
+
 #include "tracking/t_tracker_kalman_fusion.hpp"
 #include "tracking/t_fusion.hpp"
 #include "tracking/t_imu_fusion.hpp"
@@ -83,6 +89,15 @@ namespace {
 		get_prediction(const timepoint_ns when_ns,
 		               struct xrt_space_relation *out_relation) override;
 
+		bool
+		integrate_pose(const xrt_pose &pose, const Vector3d &pos_variance, const Vector3d &orient_variance, double residual_limit);
+
+		bool
+		integrate_imu_sample(xrt_imu_sample &sample, Vector3d &accel_variance, Vector3d &gyro_variance);
+
+		void
+		integrate_samples_up_to(int64_t timestamp_ns);
+
 	private:
 		void
 		reset_filter();
@@ -104,8 +119,12 @@ namespace {
 		TrackingInfo orientation_state;
 		TrackingInfo position_state;
 
+		// TODO: Figure out a good way to expose the pose offset
 		// Distance from IMU origin to slam pose position
-		Vector3d slam_pose_offset{0, 0, -0.09};
+		Vector3d slam_pose_offset{0, 0, 0};
+
+		std::queue<xrt_imu_sample> ff_samples;
+		std::queue<std::pair<Vector3d, Vector3d>> ff_sample_variance;
 	};
 
 	void
@@ -129,6 +148,87 @@ namespace {
 		imu = SimpleIMUFusion{};
 	}
 
+	bool
+	KalmanFusion::integrate_pose(const xrt_pose &pose, const Vector3d &pos_variance, const Vector3d &orient_variance, double residual_limit) {
+		Vector3d pos = map_vec3(pose.position).cast<double>();
+		Quaterniond orient = map_quat(pose.orientation).cast<double>();
+
+		auto pos_meas = AbsolutePositionLeverArmMeasurement{pos, slam_pose_offset, pos_variance};
+		auto orient_meas = AbsoluteOrientationMeasurement{orient, orient_variance};
+
+		double pos_resid = pos_meas.getResidual(filter_state).norm();
+
+		if (pos_resid > residual_limit) {
+			// Residual arbitrarily "too large"
+			U_LOG_W(
+			    "position measurement residual is %f, resetting "
+			    "filter state",
+			    pos_resid);
+			reset_filter();
+			return false;
+		}
+
+		return flexkalman::correctUnscented(filter_state, orient_meas) && flexkalman::correctUnscented(filter_state, pos_meas);
+	}
+
+	bool
+	KalmanFusion::integrate_imu_sample(xrt_imu_sample &sample, Vector3d &accel_variance, Vector3d &gyro_variance) {
+		//! @todo use better measurements instead of the preceding "simple
+		//! fusion"
+		const Vector3d G = Vector3d::UnitY() * -MATH_GRAVITY_M_S2;
+		Vector3d acc = map_vec3_f64(sample.accel_m_s2);
+		Vector3d gyro = map_vec3_f64(sample.gyro_rad_secs);
+
+		//TODO: Figure out the acceleration.
+		acc = Vector3d::Zero();
+
+		gyro = filter_state.getQuaternion() * gyro;
+
+		auto acc_meas = AccelerometerMeasurement{acc, G, accel_variance};
+		auto gyro_meas = BiasedGyroMeasurement{gyro, gyro_variance};
+
+		if (!(flexkalman::correctUnscented(combined_state, acc_meas) && flexkalman::correctUnscented(combined_state, gyro_meas))) {
+			U_LOG_E(
+			    "Got non-finite something when filtering IMU - "
+			    "resetting filter and IMU fusion!");
+			reset_filter_and_imu();
+		}
+
+		// 7200 deg/sec
+		constexpr double max_rad_per_sec = 20.0 * double(EIGEN_PI) * 2;
+		if (filter_state.angularVelocity().squaredNorm() > max_rad_per_sec * max_rad_per_sec) {
+			U_LOG_E(
+			    "Got excessive angular velocity when filtering "
+			    "IMU - resetting filter and IMU fusion!");
+			reset_filter_and_imu();
+		}
+
+		return true;
+	}
+
+	void
+	KalmanFusion::integrate_samples_up_to(int64_t target_ns) {
+		while (!ff_samples.empty()) {
+			auto sample = ff_samples.front();
+			auto variance = ff_sample_variance.front();
+			auto ts = sample.timestamp_ns;
+
+			if (filter_time_ns > 0 && ts != filter_time_ns) {
+				double dt = time_ns_to_s(ts - filter_time_ns);
+				assert(dt > 0);
+				flexkalman::predict(combined_state, combined_process_model, dt);
+			}
+
+			filter_time_ns = ts;
+
+			if (ts > target_ns) break;
+
+			integrate_imu_sample(sample, variance.first, variance.second);
+			ff_sample_variance.pop();
+			ff_samples.pop();
+		}
+	}
+
 	void
 	KalmanFusion::process_imu_data(const struct xrt_imu_sample *sample,
 	                               const struct xrt_vec3 *accel_variance_optional,
@@ -143,53 +243,20 @@ namespace {
 			gyro_variance = map_vec3(*gyro_variance_optional).cast<double>();
 		}
 
-		Vector3d accel = map_vec3_f64(sample->accel_m_s2);
-		Vector3d gyro = map_vec3_f64(sample->gyro_rad_secs);
-
-		imu.handleAccel(accel, sample->timestamp_ns);
-		imu.handleGyro(gyro, sample->timestamp_ns);
+		imu.handleAccel(map_vec3_f64(sample->accel_m_s2), sample->timestamp_ns);
+		imu.handleGyro(map_vec3_f64(sample->gyro_rad_secs), sample->timestamp_ns);
 		imu.postCorrect();
 
-		//! @todo use better measurements instead of the preceding "simple
-		//! fusion"
-		if (filter_time_ns != 0 && filter_time_ns != sample->timestamp_ns) {
-			float dt = time_ns_to_s(sample->timestamp_ns - filter_time_ns);
-			assert(dt > 0);
-			flexkalman::predict(combined_state, combined_process_model, dt);
-		}
+		if (tracked) {
+			// TODO: Prevent the queue from getting too big.
+			//assert(ff_samples.size() <= 1024);
+			if (ff_samples.size() >= 1024) {
+				ff_samples.pop();
+				ff_sample_variance.pop();
+			}
 
-		filter_time_ns = sample->timestamp_ns;
-
-		// TODO: Find a good way to separate gravity
-		Vector3d G = Vector3d::UnitY() * -MATH_GRAVITY_M_S2;
-		auto acc = Vector3d::Zero();
-
-		// There's probably a way to simplify this, but it works
-		gyro = AngleAxisd(-EIGEN_PI/2, Vector3d::UnitY()) * gyro;
-		gyro = Vector3d{ gyro.z(), gyro.y(), -gyro.x()};
-
-		auto accel_measurement =
-		    AccelerometerMeasurement{acc, G, accel_variance};
-		auto gyro_measurement = BiasedGyroMeasurement{gyro, gyro_variance};
-
-		if (flexkalman::correctUnscented(combined_state, accel_measurement) &&
-		    flexkalman::correctUnscented(combined_state, gyro_measurement)) {
-			orientation_state.tracked = true;
-			orientation_state.valid = true;
-		} else {
-			U_LOG_E(
-			    "Got non-finite something when filtering IMU - "
-			    "resetting filter and IMU fusion!");
-			reset_filter_and_imu();
-		}
-
-		// 7200 deg/sec
-		constexpr double max_rad_per_sec = 20.0 * double(EIGEN_PI) * 2;
-		if (filter_state.angularVelocity().squaredNorm() > max_rad_per_sec * max_rad_per_sec) {
-			U_LOG_E(
-			    "Got excessive angular velocity when filtering "
-			    "IMU - resetting filter and IMU fusion!");
-			reset_filter_and_imu();
+			ff_samples.push(*sample);
+			ff_sample_variance.push({accel_variance, gyro_variance});
 		}
 	}
 
@@ -208,40 +275,19 @@ namespace {
 			orientation_variance = map_vec3(*orientation_variance_optional).cast<double>();
 		}
 
-		Vector3d pos = map_vec3(sample->pose.position).cast<double>();
-		Quaterniond orient = map_quat(sample->pose.orientation).cast<double>();
-
-		auto pos_measurement = AbsolutePositionLeverArmMeasurement{pos, slam_pose_offset, position_variance};
-		auto orient_measurement = AbsoluteOrientationMeasurement{orient, orientation_variance};
-
-		double pos_resid = pos_measurement.getResidual(filter_state).norm();
-		double orient_resid = orient_measurement.getResidual(filter_state).norm();
-
-		if (pos_resid > residual_limit) {
-			// Residual arbitrarily "too large"
-			U_LOG_W(
-			    "position measurement residual is %f, resetting "
-			    "filter state",
-			    pos_resid);
-			reset_filter();
+		if (sample->timestamp_ns < filter_time_ns) {
+			printf("Skipping old pose sample, filter_time=%zu, ts=%zu.\n", filter_time_ns, sample->timestamp_ns);
 			return;
 		}
-		if (orient_resid > residual_limit) {
-			// Residual arbitrarily "too large"
-			U_LOG_W(
-			    "orientation measurement residual is %f, resetting "
-			    "filter state",
-			    orient_resid);
-			reset_filter();
-			return;
-		}
-		if (flexkalman::correctUnscented(filter_state, orient_measurement) &&
-		    flexkalman::correctUnscented(filter_state, pos_measurement)) {
-			if (!tracked) {
-				tracked = true;
-				position_state.valid = true;
-				position_state.tracked = true;
-			}
+
+		integrate_samples_up_to(sample->timestamp_ns);
+
+		if (integrate_pose(sample->pose, position_variance, orientation_variance, residual_limit)) {
+			tracked = true;
+			position_state.valid = true;
+			position_state.tracked = true;
+			orientation_state.valid = true;
+			orientation_state.tracked = true;
 		} else {
 			U_LOG_W(
 			    "Got non-finite something when filtering "
@@ -249,6 +295,7 @@ namespace {
 			reset_filter();
 		}
 	}
+
 
 	void
 	KalmanFusion::get_prediction(timepoint_ns when_ns, struct xrt_space_relation *out_relation)
@@ -262,6 +309,9 @@ namespace {
 		if (!tracked || filter_time_ns == 0) {
 			return;
 		}
+
+		integrate_samples_up_to(when_ns);
+
 		float dt = time_ns_to_s(when_ns - filter_time_ns);
 		auto predicted_state = flexkalman::getPrediction(filter_state, main_process_model, dt);
 
