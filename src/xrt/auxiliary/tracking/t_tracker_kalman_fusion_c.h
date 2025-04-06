@@ -31,11 +31,11 @@ kalman_fusion_process_imu_data(struct KalmanFusionInterfaceWrapper *wrapper,
                                const struct xrt_vec3 *gyro_variance_optional);
 
 void
-kalman_fusion_process_slam_pose(struct KalmanFusionInterfaceWrapper *wrapper,
-                                const struct xrt_pose_sample *sample,
-                                const struct xrt_vec3 *position_variance_optional,
-                                const struct xrt_vec3 *orientation_variance_optional,
-                                float residual_limit);
+kalman_fusion_process_pose(struct KalmanFusionInterfaceWrapper *wrapper,
+                           const struct xrt_pose_sample *sample,
+                           const struct xrt_vec3 *position_variance_optional,
+                           const struct xrt_vec3 *orientation_variance_optional,
+                           float residual_limit);
 
 void
 kalman_fusion_get_prediction(struct KalmanFusionInterfaceWrapper *wrapper,

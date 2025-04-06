@@ -51,8 +51,8 @@ namespace {
 	using Eigen::AngleAxisd;
 	using Eigen::Quaterniond;
 	using Eigen::Vector3d;
-	using flexkalman::pose_externalized_rotation::State;
 	using flexkalman::AccelerometerMeasurement;
+	using flexkalman::pose_externalized_rotation::State;
 
 	using BiasState = flexkalman::IMUBiasState;
 	using CombinedState = flexkalman::AugmentedState<State, BiasState>;
@@ -80,17 +80,19 @@ namespace {
 		                 const struct xrt_vec3 *accel_variance_optional,
 		                 const struct xrt_vec3 *gyro_variance_optional) override;
 		void
-		process_slam_pose(const struct xrt_pose_sample *sample,
-		                  const struct xrt_vec3 *position_variance_optional,
-		                  const struct xrt_vec3 *orientation_variance_optional,
-		                  const float residual_limit) override;
+		process_pose(const struct xrt_pose_sample *sample,
+		             const struct xrt_vec3 *position_variance_optional,
+		             const struct xrt_vec3 *orientation_variance_optional,
+		             const float residual_limit) override;
 
 		void
-		get_prediction(const timepoint_ns when_ns,
-		               struct xrt_space_relation *out_relation) override;
+		get_prediction(const timepoint_ns when_ns, struct xrt_space_relation *out_relation) override;
 
 		bool
-		integrate_pose(const xrt_pose &pose, const Vector3d &pos_variance, const Vector3d &orient_variance, double residual_limit);
+		integrate_pose(const xrt_pose &pose,
+		               const Vector3d &pos_variance,
+		               const Vector3d &orient_variance,
+		               double residual_limit);
 
 		bool
 		integrate_imu_sample(xrt_imu_sample &sample, Vector3d &accel_variance, Vector3d &gyro_variance);
@@ -149,7 +151,11 @@ namespace {
 	}
 
 	bool
-	KalmanFusion::integrate_pose(const xrt_pose &pose, const Vector3d &pos_variance, const Vector3d &orient_variance, double residual_limit) {
+	KalmanFusion::integrate_pose(const xrt_pose &pose,
+	                             const Vector3d &pos_variance,
+	                             const Vector3d &orient_variance,
+	                             double residual_limit)
+	{
 		Vector3d pos = map_vec3(pose.position).cast<double>();
 		Quaterniond orient = map_quat(pose.orientation).cast<double>();
 
@@ -168,18 +174,20 @@ namespace {
 			return false;
 		}
 
-		return flexkalman::correctUnscented(filter_state, orient_meas) && flexkalman::correctUnscented(filter_state, pos_meas);
+		return flexkalman::correctUnscented(filter_state, orient_meas) &&
+		       flexkalman::correctUnscented(filter_state, pos_meas);
 	}
 
 	bool
-	KalmanFusion::integrate_imu_sample(xrt_imu_sample &sample, Vector3d &accel_variance, Vector3d &gyro_variance) {
+	KalmanFusion::integrate_imu_sample(xrt_imu_sample &sample, Vector3d &accel_variance, Vector3d &gyro_variance)
+	{
 		//! @todo use better measurements instead of the preceding "simple
 		//! fusion"
 		const Vector3d G = Vector3d::UnitY() * -MATH_GRAVITY_M_S2;
 		Vector3d acc = map_vec3_f64(sample.accel_m_s2);
 		Vector3d gyro = map_vec3_f64(sample.gyro_rad_secs);
 
-		//TODO: Figure out the acceleration.
+		// TODO: Figure out the acceleration.
 		acc = Vector3d::Zero();
 
 		gyro = filter_state.getQuaternion() * gyro;
@@ -187,7 +195,8 @@ namespace {
 		auto acc_meas = AccelerometerMeasurement{acc, G, accel_variance};
 		auto gyro_meas = BiasedGyroMeasurement{gyro, gyro_variance};
 
-		if (!(flexkalman::correctUnscented(combined_state, acc_meas) && flexkalman::correctUnscented(combined_state, gyro_meas))) {
+		if (!(flexkalman::correctUnscented(combined_state, acc_meas) &&
+		      flexkalman::correctUnscented(combined_state, gyro_meas))) {
 			U_LOG_E(
 			    "Got non-finite something when filtering IMU - "
 			    "resetting filter and IMU fusion!");
@@ -207,7 +216,8 @@ namespace {
 	}
 
 	void
-	KalmanFusion::integrate_samples_up_to(int64_t target_ns) {
+	KalmanFusion::integrate_samples_up_to(int64_t target_ns)
+	{
 		while (!ff_samples.empty()) {
 			auto sample = ff_samples.front();
 			auto variance = ff_sample_variance.front();
@@ -221,7 +231,8 @@ namespace {
 
 			filter_time_ns = ts;
 
-			if (ts > target_ns) break;
+			if (ts > target_ns)
+				break;
 
 			integrate_imu_sample(sample, variance.first, variance.second);
 			ff_sample_variance.pop();
@@ -249,7 +260,7 @@ namespace {
 
 		if (tracked) {
 			// TODO: Prevent the queue from getting too big.
-			//assert(ff_samples.size() <= 1024);
+			// assert(ff_samples.size() <= 1024);
 			if (ff_samples.size() >= 1024) {
 				ff_samples.pop();
 				ff_sample_variance.pop();
@@ -261,10 +272,10 @@ namespace {
 	}
 
 	void
-	KalmanFusion::process_slam_pose(const struct xrt_pose_sample *sample,
-	                                const struct xrt_vec3 *position_variance_optional,
-	                                const struct xrt_vec3 *orientation_variance_optional,
-	                                float residual_limit)
+	KalmanFusion::process_pose(const struct xrt_pose_sample *sample,
+	                           const struct xrt_vec3 *position_variance_optional,
+	                           const struct xrt_vec3 *orientation_variance_optional,
+	                           float residual_limit)
 	{
 		Vector3d position_variance{1.e-4, 1.e-4, 4.e-4};
 		Vector3d orientation_variance{1.e-4, 1.e-4, 4.e-4};
@@ -276,9 +287,12 @@ namespace {
 		}
 
 		if (sample->timestamp_ns < filter_time_ns) {
-			printf("Skipping old pose sample, filter_time=%zu, ts=%zu.\n", filter_time_ns, sample->timestamp_ns);
+			printf("Skipping old pose sample, filter_time=%zu, ts=%zu.\n", filter_time_ns,
+			       sample->timestamp_ns);
 			return;
 		}
+
+		printf("didnt skip old sample, filter_time=%zu, ts=%zu.\n", filter_time_ns, sample->timestamp_ns);
 
 		integrate_samples_up_to(sample->timestamp_ns);
 
