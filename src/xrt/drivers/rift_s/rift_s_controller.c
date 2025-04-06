@@ -678,7 +678,7 @@ rift_s_controller_push_observed_pose(struct xrt_device *xdev, timepoint_ns frame
 
 	struct xrt_pose_sample sample = {.pose = *pose, .timestamp_ns = frame_mono_ns};
 	struct xrt_vec3 position_variance = {1.e-6, 1.e-6, 1.e-6};
-	struct xrt_vec3 orientation_variance = {1.e-4, 1.e-6, 1.e-4};
+	struct xrt_vec3 orientation_variance = {1.e-3, 1.e-5, 1.e-3};
 	kalman_fusion_process_pose(ctrl->kalman_fusion, &sample, &position_variance, &orientation_variance, 15);
 
 	if (ctrl->update_yaw_from_optical) {
@@ -821,7 +821,7 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 
 	u_var_add_gui_header(ctrl, NULL, "Kalman Fusion");
 	kalman_fusion_add_ui(ctrl->kalman_fusion, ctrl,
-		(device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) ? "rift_s_left" : "rift_s_right");
+	                     (device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) ? "rift_s_left" : "rift_s_right");
 
 	u_var_add_gui_header(ctrl, NULL, "3DoF Tracking");
 	m_imu_3dof_add_vars(&ctrl->fusion, ctrl, "");
