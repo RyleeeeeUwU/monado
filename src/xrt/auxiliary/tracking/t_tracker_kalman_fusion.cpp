@@ -135,7 +135,7 @@ namespace {
 			gyro_variance = map_vec3(*gyro_variance_optional).cast<double>();
 		}
 
-		auto accel = map_vec3_f64(sample->accel_m_s2);
+		Eigen::Vector3d accel = map_vec3_f64(sample->accel_m_s2);
 		Eigen::Vector3d gyro = map_vec3_f64(sample->gyro_rad_secs);
 
 		imu.handleAccel(accel, sample->timestamp_ns);
@@ -154,8 +154,6 @@ namespace {
 
 		// rotate gyro to match what the kalman filter expects
 		gyro = filter_state.getQuaternion() * gyro;
-		gyro = Eigen::AngleAxisd(-EIGEN_PI / 2, Eigen::Vector3d::UnitY()) * gyro;
-		gyro = Eigen::Vector3d{gyro.z(), gyro.y(), -gyro.x()};
 
 		auto accel_residual = imu.getCorrectedWorldAccel(accel);
 		auto accel_measurement = AccelerometerMeasurement{accel_residual, accel_variance};
