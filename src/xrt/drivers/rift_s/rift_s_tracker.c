@@ -798,6 +798,7 @@ rift_s_tracker_get_tracked_pose(struct rift_s_tracker *t,
 		    XRT_SPACE_RELATION_ORIENTATION_VALID_BIT | XRT_SPACE_RELATION_POSITION_VALID_BIT |
 		    XRT_SPACE_RELATION_ORIENTATION_TRACKED_BIT | XRT_SPACE_RELATION_POSITION_TRACKED_BIT);
 
+		t->pose = imu_relation.pose;
 		m_relation_chain_push_relation(&xrc, &imu_relation);
 	} else {
 		struct xrt_space_relation imu_relation = XRT_SPACE_RELATION_ZERO;

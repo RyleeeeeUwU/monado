@@ -544,6 +544,7 @@ rift_s_controller_get_fusion_pose(struct rift_s_controller *ctrl,
 {
 #if 1
 	kalman_fusion_get_prediction(ctrl->kalman_fusion, at_timestamp_ns, out_relation);
+	ctrl->pose = out_relation->pose;
 #else
 	out_relation->pose = ctrl->pose;
 	out_relation->linear_velocity.x = 0.0f;
@@ -592,11 +593,6 @@ rift_s_controller_get_tracked_pose(struct xrt_device *xdev,
 	struct xrt_space_relation *rel = m_relation_chain_reserve(&xrc);
 
 	rift_s_controller_get_fusion_pose(ctrl, name, at_timestamp_ns, rel);
-	if (ctrl->last_tracked_pose_ts != 0) {
-		rel->pose.position = ctrl->last_tracked_pose.position;
-		rel->relation_flags |= (enum xrt_space_relation_flags)(XRT_SPACE_RELATION_POSITION_VALID_BIT |
-		                                                       XRT_SPACE_RELATION_POSITION_TRACKED_BIT);
-	}
 	os_mutex_unlock(&ctrl->mutex);
 
 	m_relation_chain_resolve(&xrc, out_relation);
@@ -816,10 +812,16 @@ rift_s_controller_create(struct rift_s_system *sys, enum xrt_device_type device_
 	ctrl->base.binding_profile_count = ARRAY_SIZE(binding_profiles_rift_s);
 
 	u_var_add_root(ctrl, ctrl->base.str, true);
+	u_var_add_pose(ctrl, &ctrl->P_aim_grip, "Grip pose offset");
+
 	u_var_add_gui_header(ctrl, NULL, "Tracking");
 	u_var_add_pose(ctrl, &ctrl->pose, "Tracked Pose");
+	u_var_add_ro_i64(ctrl, &ctrl->last_tracked_pose_ts, "Last Constellation Pose TS (ns)");
+	u_var_add_pose(ctrl, &ctrl->last_tracked_pose, "Last Constellation Pose");
 
-	u_var_add_pose(ctrl, &ctrl->P_aim_grip, "Grip pose offset");
+	u_var_add_gui_header(ctrl, NULL, "Kalman Fusion");
+	kalman_fusion_add_ui(ctrl->kalman_fusion, ctrl,
+		(device_type == XRT_DEVICE_TYPE_LEFT_HAND_CONTROLLER) ? "rift_s_left" : "rift_s_right");
 
 	u_var_add_gui_header(ctrl, NULL, "3DoF Tracking");
 	m_imu_3dof_add_vars(&ctrl->fusion, ctrl, "");
