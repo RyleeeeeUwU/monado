@@ -324,7 +324,7 @@ namespace {
 			return;
 		}
 
-		integrate_samples_up_to(when_ns);
+		// integrate_samples_up_to(when_ns);
 
 		float dt = time_ns_to_s(when_ns - filter_time_ns);
 		auto predicted_state = flexkalman::getPrediction(filter_state, main_process_model, dt);
