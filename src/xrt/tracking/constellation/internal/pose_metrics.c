@@ -16,16 +16,6 @@
 
 #include "pose_metrics.h"
 
-struct visible_led_info
-{
-	struct constellation_led *led;
-	double led_radius_px;   /* Expected max size of the LED in pixels at that distance */
-	struct xrt_vec2 pos_px; /* Projected position of the LED (pixels) */
-	struct xrt_vec3 pos_m;  /* Projected physical position of the LED (metres) */
-	bool matched;
-	double facing_dot; /* Dot product between LED and camera */
-};
-
 static void
 expand_rect(struct pose_rect *bounds, double x, double y, double w, double h)
 {
