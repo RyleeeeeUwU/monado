@@ -530,9 +530,13 @@ wmr_controller_base_get_tracked_pose(struct xrt_device *xdev,
 
 	struct xrt_relation_chain xrc = {0};
 
-	m_relation_chain_push_pose(&xrc, &wcb->P_aim);
+	if (name == XRT_INPUT_G2_CONTROLLER_AIM_POSE || name == XRT_INPUT_ODYSSEY_CONTROLLER_AIM_POSE ||
+	    name == XRT_INPUT_WMR_AIM_POSE)
+		m_relation_chain_push_pose(&xrc, &wcb->P_aim);
+
 	if (name == XRT_INPUT_G2_CONTROLLER_GRIP_POSE || name == XRT_INPUT_ODYSSEY_CONTROLLER_GRIP_POSE ||
 	    name == XRT_INPUT_WMR_GRIP_POSE) {
+		m_relation_chain_push_pose(&xrc, &wcb->P_aim);
 		m_relation_chain_push_pose(&xrc, &wcb->P_aim_grip);
 	}
 
