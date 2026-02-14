@@ -280,10 +280,10 @@ rift_s_hmd_create(struct rift_s_system *sys, const unsigned char *hmd_serial_no,
 	hmd->base.hmd->views[0].viewport.y_pixels = 0;
 	hmd->base.hmd->views[1].viewport.y_pixels = view_h;
 
-	/* FIXME: Incorrection distortion taken from the Rift CV1 for now */
+	/* Approximate distortion for Rift S */
 	const double display_w_meters = 0.120315f / 2.0; // Per-eye width
 	const double display_h_meters = 0.066842f;
-	const double lens_sep = 0.062f;
+	const double lens_sep = 0.064f;
 	const double hFOV = DEG_TO_RAD(94.0);
 
 	// center of projection
