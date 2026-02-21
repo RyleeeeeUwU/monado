@@ -1,3 +1,7 @@
+# ⚠️ THIS IS A FORK OF THAYTAN'S MONADO WHICH INCLUDES A BRANCH WITH IMPROVED RIFT S DISTORTION ⚠️
+# Check out the original GitLab repo: https://gitlab.freedesktop.org/thaytan/monado
+(The only reason I haven't forked Thaytan's repo on GitLab is that freedesktop.org's GitLab has restrictions on new accounts)
+
 # Monado - XR Runtime (XRT)
 
 <!--
